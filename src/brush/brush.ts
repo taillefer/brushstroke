@@ -1,0 +1,137 @@
+import type { FlatLine } from '../geometry/flatten';
+import type { Hand } from '../hand';
+import { createNoise1D, type Random } from '../random';
+import type { Tuning } from '../tuning';
+import type { Point } from '../types';
+
+export type BrushKind = 'flat' | 'round';
+
+export interface BrushOptions {
+  brush: BrushKind;
+  /** Brush width in pixels. */
+  size: number;
+  hand: Hand;
+}
+
+export interface BristlePoint extends Point {
+  /** Opacity of the paint at this point. 0 means the bristle does not touch the paper. */
+  alpha: number;
+}
+
+/** The track one bristle leaves along one line. */
+export interface BristlePath {
+  color: string;
+  /** Line width in pixels. */
+  width: number;
+  points: BristlePoint[];
+}
+
+interface Bristle {
+  /** Fixed offset from the brush centre, in pixels. */
+  offset: Point;
+  /** Distance from the brush centre as a share of the brush width, from 0 to about 0.5. */
+  reach: number;
+  /** Distance after which this bristle starts to run dry, in pixels. */
+  dryDistance: number;
+  gapNoise: (x: number) => number;
+}
+
+/** The unit direction a flat brush's edge points in, on screen (y points down). A left hand mirrors it. */
+export function flatBrushAxis(hand: Hand, tuning: Pick<Tuning, 'flatBrushAngle'>): Point {
+  const angle = (tuning.flatBrushAngle * Math.PI) / 180;
+  const x = Math.cos(angle);
+  return { x: hand === 'right' ? x : -x, y: -Math.sin(angle) };
+}
+
+/**
+ * Turns one line into one path per bristle.
+ *
+ * Pressure decides how many bristles touch the paper: the outer bristles lift
+ * first, so a light touch paints a narrow mark. It also decides how dark the
+ * paint is. A flat brush keeps its edge at a fixed angle, so its mark is wide
+ * across the edge and thin along it. A round brush is the same in every
+ * direction.
+ */
+export function brushLine(
+  line: FlatLine,
+  pressure: readonly number[],
+  options: BrushOptions,
+  tuning: Tuning,
+  random: Random,
+): BristlePath[] {
+  const bristles = createBristles(options, tuning, random);
+  const width = Math.max(0.5, (options.size / tuning.bristleCount) * tuning.bristleWidth);
+  // The edge of the mark fades over the space between two bristles, so it is soft rather than stepped.
+  const edgeSoftness = 0.5 / tuning.bristleCount;
+
+  return bristles.map((bristle) => ({
+    color: line.color,
+    width,
+    points: line.points.map((point, i) => {
+      const p = pressure[i] ?? 0;
+      const reachAtPressure = (tuning.minimumWidth + (1 - tuning.minimumWidth) * p) / 2;
+      const contact = clamp01((reachAtPressure - bristle.reach) / edgeSoftness + 0.5);
+      const darkness = 1 + (p - 1) * tuning.pressureDarkness;
+      const alpha = tuning.bristleOpacity * contact * darkness * paintLeft(bristle, point.distance, tuning);
+      return { x: point.x + bristle.offset.x, y: point.y + bristle.offset.y, alpha };
+    }),
+  }));
+}
+
+function createBristles(options: BrushOptions, tuning: Tuning, random: Random): Bristle[] {
+  const { size } = options;
+  const count = Math.max(1, Math.round(tuning.bristleCount));
+  // Bristles are laid out for a right hand. A left hand gets the mirror image.
+  const axis = flatBrushAxis('right', tuning);
+  const across: Point = { x: -axis.y, y: axis.x };
+  const mirror = options.hand === 'left' ? -1 : 1;
+  // Golden angle: spreads the round brush's bristles evenly over its disc.
+  const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+  const turn = random.next() * 2 * Math.PI;
+
+  return Array.from({ length: count }, (_, i): Bristle => {
+    const own = random.fork(i);
+    const jitter = (own.next() * 2 - 1) * tuning.bristleJitter;
+    let offset: Point;
+    let reach: number;
+
+    if (options.brush === 'flat') {
+      const along = (i + 0.5) / count - 0.5 + jitter;
+      const depth = (own.next() - 0.5) * tuning.flatBrushThickness;
+      offset = {
+        x: (axis.x * along + across.x * depth) * size,
+        y: (axis.y * along + across.y * depth) * size,
+      };
+      reach = Math.abs(along);
+    } else {
+      const radius = Math.max(0, 0.5 * Math.sqrt((i + 0.5) / count) + jitter);
+      const angle = turn + i * goldenAngle;
+      offset = { x: Math.cos(angle) * radius * size, y: Math.sin(angle) * radius * size };
+      reach = radius;
+    }
+
+    return {
+      offset: { x: offset.x * mirror, y: offset.y },
+      reach,
+      dryDistance: tuning.dryDistance * (1 + tuning.dryVariation * (own.next() * 2 - 1)),
+      gapNoise: createNoise1D(Math.floor(own.next() * 4294967296)),
+    };
+  });
+}
+
+/**
+ * How much paint the bristle still lays down, from 1 to 0. Once a bristle
+ * passes its dry distance it fades out, and breaks into gaps that grow as it
+ * runs out.
+ */
+function paintLeft(bristle: Bristle, distance: number, tuning: Tuning): number {
+  if (distance <= bristle.dryDistance) return 1;
+  const fadeLength = tuning.dryFade * bristle.dryDistance;
+  const ink = fadeLength > 0 ? clamp01(1 - (distance - bristle.dryDistance) / fadeLength) : 0;
+  const patch = (bristle.gapNoise(distance / tuning.dryGapLength) + 1) / 2;
+  return patch < ink ? ink : 0;
+}
+
+function clamp01(value: number): number {
+  return Math.min(1, Math.max(0, value));
+}

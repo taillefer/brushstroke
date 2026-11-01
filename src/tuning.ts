@@ -9,8 +9,12 @@ export interface Tuning {
   bristleJitter: number;
   /** Opacity of one bristle at full pressure. */
   bristleOpacity: number;
+  /** Line width of one bristle, as a multiple of the brush width divided by the bristle count. */
+  bristleWidth: number;
   /** Width of the painted mark at zero pressure, as a share of the full width. */
   minimumWidth: number;
+  /** How much pressure darkens the paint, from 0 (not at all) to 1 (fully). */
+  pressureDarkness: number;
 
   /** Pressure along the middle of a line, before anchors, corners, direction and noise. */
   basePressure: number;
@@ -44,6 +48,10 @@ export interface Tuning {
   dryDistance: number;
   /** How much the dry distance varies between bristles, from 0 (all equal) to 1. */
   dryVariation: number;
+  /** How long a bristle takes to run out once it starts to dry, as a share of its dry distance. */
+  dryFade: number;
+  /** Typical length of the gaps a drying bristle leaves, in pixels. */
+  dryGapLength: number;
 
   /** Angle of a flat brush for a right hand, in degrees. A left hand mirrors it. */
   flatBrushAngle: number;
@@ -53,9 +61,11 @@ export interface Tuning {
 
 export const defaultTuning: Tuning = {
   bristleCount: 24,
-  bristleJitter: 0.15,
+  bristleJitter: 0.04,
   bristleOpacity: 0.6,
+  bristleWidth: 1.6,
   minimumWidth: 0.2,
+  pressureDarkness: 0.5,
 
   basePressure: 0.75,
   touchDownPressure: 0.3,
@@ -75,6 +85,8 @@ export const defaultTuning: Tuning = {
 
   dryDistance: 600,
   dryVariation: 0.5,
+  dryFade: 0.5,
+  dryGapLength: 8,
 
   flatBrushAngle: 45,
   flatBrushThickness: 0.15,
@@ -91,7 +103,9 @@ export const tuningRanges: Record<keyof Tuning, TuningFieldRange> = {
   bristleCount: { min: 4, max: 64, step: 1 },
   bristleJitter: { min: 0, max: 0.5, step: 0.01 },
   bristleOpacity: { min: 0.05, max: 1, step: 0.01 },
+  bristleWidth: { min: 0.2, max: 4, step: 0.1 },
   minimumWidth: { min: 0, max: 1, step: 0.01 },
+  pressureDarkness: { min: 0, max: 1, step: 0.01 },
 
   basePressure: { min: 0, max: 1, step: 0.01 },
   touchDownPressure: { min: 0, max: 1, step: 0.01 },
@@ -111,6 +125,8 @@ export const tuningRanges: Record<keyof Tuning, TuningFieldRange> = {
 
   dryDistance: { min: 50, max: 3000, step: 10 },
   dryVariation: { min: 0, max: 1, step: 0.01 },
+  dryFade: { min: 0, max: 2, step: 0.01 },
+  dryGapLength: { min: 1, max: 50, step: 1 },
 
   flatBrushAngle: { min: 0, max: 90, step: 1 },
   flatBrushThickness: { min: 0.02, max: 1, step: 0.01 },
