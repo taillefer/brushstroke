@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 140">
+  <!-- "hi" in a single cursive stroke, with the dot of the i as its own small line -->
+  <g fill="none" stroke="#1d3557" transform="translate(40 10) scale(2.2 1.4)">
+    <path d="M5 80 C20 70 30 40 30 20 C30 8 20 8 19 22 C17 45 17 65 17 80 C21 62 33 55 39 60 C45 65 41 78 47 80 C53 82 57 70 61 60 C61 70 59 78 65 80 C71 82 77 74 81 68"/>
+    <path d="M60 46 L62 44"/>
+  </g>
+</svg>

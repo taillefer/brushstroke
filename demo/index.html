@@ -4,9 +4,35 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>brushstroke demo</title>
+    <link rel="stylesheet" href="./demo.css" />
   </head>
   <body>
-    <h1>brushstroke</h1>
-    <p>The demo page arrives with ticket #10.</p>
+    <header>
+      <h1>brushstroke</h1>
+      <p>Each example SVG painted four ways. <a href="./tune.html">Tuning page →</a></p>
+      <label>Brush size <input id="size" type="range" min="2" max="40" value="12" /> <output id="size-value">12</output> px</label>
+    </header>
+
+    <!-- The circle example is read from this element, to show the <svg> element source. -->
+    <div hidden>
+      <svg id="circle-source" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 160">
+        <circle cx="150" cy="80" r="55" fill="none" stroke="#2a6f4e" />
+      </svg>
+    </div>
+
+    <table id="examples">
+      <thead>
+        <tr>
+          <th>Example</th>
+          <th>Flat, right hand</th>
+          <th>Flat, left hand</th>
+          <th>Round, right hand</th>
+          <th>Round, left hand</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <script type="module" src="./main.ts"></script>
   </body>
 </html>

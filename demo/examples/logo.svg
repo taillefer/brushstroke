@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 180">
+  <!-- A mountain logo: filled ground (skipped), outlined sun and peaks -->
+  <rect x="0" y="150" width="300" height="30" fill="#d8cbb0"/>
+  <circle cx="215" cy="55" r="28" fill="none" stroke="#c96b1a"/>
+  <polyline points="20,150 105,45 150,100 185,70 280,150" fill="none" stroke="#2b2b2b"/>
+  <path d="M85 70 L105 45 L125 70" fill="none" stroke="#2b2b2b"/>
+</svg>
