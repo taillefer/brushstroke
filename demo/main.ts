@@ -1,4 +1,5 @@
 import { paintSvg, type BrushKind, type Hand, type SvgSource } from '../src/index';
+import { exampleFiles, LINE_SVG } from './examples';
 
 interface Example {
   name: string;
@@ -7,22 +8,18 @@ interface Example {
   source: () => SvgSource;
 }
 
-const LINE_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 80">
-  <line x1="30" y1="40" x2="270" y2="40"/>
-</svg>`;
+const fromUrl = (file: { name: string; url: string }): Example =>
+  ({ name: file.name, sourceKind: 'URL', source: () => file.url });
 
 const examples: Example[] = [
   { name: 'Straight line', sourceKind: 'SVG text', source: () => LINE_SVG },
-  { name: 'Curve', sourceKind: 'URL', source: () => 'examples/curve.svg' },
-  { name: 'Zigzag', sourceKind: 'URL', source: () => 'examples/zigzag.svg' },
+  ...exampleFiles.slice(0, 2).map(fromUrl),
   {
     name: 'Circle',
     sourceKind: '<svg> element',
     source: () => document.querySelector<SVGSVGElement>('#circle-source')!,
   },
-  { name: 'Rectangle', sourceKind: 'URL', source: () => 'examples/rectangle.svg' },
-  { name: 'Handwriting', sourceKind: 'URL', source: () => 'examples/word.svg' },
-  { name: 'Logo outline', sourceKind: 'URL', source: () => 'examples/logo.svg' },
+  ...exampleFiles.slice(2).map(fromUrl),
 ];
 
 const variants: { brush: BrushKind; hand: Hand }[] = [

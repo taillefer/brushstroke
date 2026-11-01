@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>brushstroke tuning</title>
+    <link rel="stylesheet" href="./demo.css" />
+    <link rel="stylesheet" href="./tune.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Tuning</h1>
+      <p>
+        Four versions of the same SVG. Move sliders, make variations of the best one, and copy its config into
+        <code>src/tuning.ts</code>. <a href="./index.html">← Demo page</a>
+      </p>
+      <div class="toolbar">
+        <label>SVG <select id="svg-choice"></select></label>
+        <label>Width <input id="width" type="number" min="100" max="1200" step="10" /> px</label>
+        <label>Variation size <input id="variation" type="range" min="1" max="50" /> <output id="variation-value"></output>%</label>
+      </div>
+      <textarea id="svg-text" rows="5" placeholder="Paste SVG text here" hidden></textarea>
+      <p id="error" class="error" hidden></p>
+    </header>
+
+    <main id="panels"></main>
+
+    <script type="module" src="./tune.ts"></script>
+  </body>
+</html>
