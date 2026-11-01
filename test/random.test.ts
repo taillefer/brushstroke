@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createNoise1D, createRandom, hashText, resolveSeed } from '../src/random';
+import { createNoise1D, createNoise2D, createRandom, hashText, resolveSeed } from '../src/random';
 
 const take = (seed: number, count: number): number[] => {
   const random = createRandom(seed);
@@ -52,6 +52,33 @@ describe('createNoise1D', () => {
     const noise = createNoise1D(9);
     for (let x = 0; x < 20; x += 0.01) {
       expect(Math.abs(noise(x + 0.01) - noise(x))).toBeLessThan(0.05);
+    }
+  });
+});
+
+describe('createNoise2D', () => {
+  it('is deterministic, depends on the seed, and stays in [-1, 1]', () => {
+    const a = createNoise2D(5);
+    const b = createNoise2D(5);
+    const other = createNoise2D(6);
+    let differs = false;
+    for (let x = 0; x < 10; x += 0.37) {
+      for (let y = 0; y < 10; y += 0.41) {
+        expect(a(x, y)).toBe(b(x, y));
+        expect(Math.abs(a(x, y))).toBeLessThanOrEqual(1);
+        if (a(x, y) !== other(x, y)) differs = true;
+      }
+    }
+    expect(differs).toBe(true);
+  });
+
+  it('is smooth in both directions', () => {
+    const noise = createNoise2D(5);
+    for (let x = 0; x < 6; x += 0.05) {
+      for (let y = 0; y < 6; y += 0.05) {
+        expect(Math.abs(noise(x + 0.01, y) - noise(x, y))).toBeLessThan(0.05);
+        expect(Math.abs(noise(x, y + 0.01) - noise(x, y))).toBeLessThan(0.05);
+      }
     }
   });
 });

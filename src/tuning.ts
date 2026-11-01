@@ -63,6 +63,13 @@ export interface Tuning {
   /** Distance between the bends of the drift, in pixels. */
   wobbleWavelength: number;
 
+  /** How much the paper grain shows through light and dry paint, from 0 (not at all) to 1. */
+  grainAmount: number;
+  /** Size of the paper's bumps, in pixels. */
+  grainSize: number;
+  /** How sharp the grain's speckles are. Higher values give harder edges. */
+  grainContrast: number;
+
   /** A corner that turns more than this, in degrees, splits the line into separate strokes. 180 never splits. */
   splitAngle: number;
   /** How far each stroke runs on past a corner where the line was split, in pixels. */
@@ -108,6 +115,10 @@ export const defaultTuning: Tuning = {
 
   wobbleAmount: 1.5,
   wobbleWavelength: 120,
+
+  grainAmount: 0.5,
+  grainSize: 2,
+  grainContrast: 6,
 
   splitAngle: 70,
   splitOvershoot: 3,
@@ -157,6 +168,10 @@ export const tuningRanges: Record<keyof Tuning, TuningFieldRange> = {
 
   wobbleAmount: { min: 0, max: 10, step: 0.1 },
   wobbleWavelength: { min: 10, max: 600, step: 5 },
+
+  grainAmount: { min: 0, max: 1, step: 0.01 },
+  grainSize: { min: 0.5, max: 12, step: 0.1 },
+  grainContrast: { min: 1, max: 20, step: 0.5 },
 
   splitAngle: { min: 5, max: 180, step: 1 },
   splitOvershoot: { min: 0, max: 20, step: 1 },

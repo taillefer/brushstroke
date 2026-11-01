@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { brushLine, flatBrushAxis, type BristlePath, type BrushOptions } from '../src/brush/brush';
+import { brushLine, flatBrushAxis, grainCoverage, type BristlePath, type BrushOptions, type Paper } from '../src/brush/brush';
 import { flattenLine } from '../src/geometry/flatten';
 import { parsePathData } from '../src/parse/pathData';
-import { createRandom } from '../src/random';
+import { createNoise2D, createRandom } from '../src/random';
 import { resolveTuning, type Tuning } from '../src/tuning';
 
-const paint = (d: string, options: Partial<BrushOptions> = {}, overrides: Partial<Tuning> = {}, pressure = 1) => {
+const paint = (d: string, options: Partial<BrushOptions> = {}, overrides: Partial<Tuning> = {}, pressure = 1, paper?: Paper) => {
   const tuning = resolveTuning({ dryDistance: 3000, dryVariation: 0, ...overrides });
   const line = flattenLine({ ...parsePathData(d)[0]!, color: 'black' }, tuning);
   const full: BrushOptions = { brush: 'flat', size: 20, hand: 'right', ...options };
-  return brushLine(line, line.points.map(() => pressure), full, tuning, createRandom(7));
+  return brushLine(line, line.points.map(() => pressure), full, tuning, createRandom(7), paper);
 };
 
 /** Width of the painted mark across the travel direction, at point index `at`. */
@@ -106,6 +106,31 @@ describe('brushLine', () => {
       const paths = paint('M0 0 L100 0 L100 100', {}, { ...noDarkening, poolAmount: 0 });
       expect(darkest(paths, 0)).toBeCloseTo(darkest(paths, 50), 9);
       expect(darkest(paths, 100)).toBeCloseTo(darkest(paths, 50), 9);
+    });
+  });
+
+  describe('paper grain', () => {
+    const noise = createNoise2D(11);
+    const paper: Paper = (x, y) => (noise(x / 2, y / 2) + 1) / 2;
+    const totalAlpha = (paths: BristlePath[]) => paths.reduce((sum, p) => sum + p.points.reduce((s, q) => s + q.alpha, 0), 0);
+    const share = (pressure: number) =>
+      totalAlpha(paint('M0 0 L200 0', {}, { grainAmount: 0.8 }, pressure, paper))
+      / totalAlpha(paint('M0 0 L200 0', {}, { grainAmount: 0 }, pressure, paper));
+
+    it('changes nothing when grainAmount is 0', () => {
+      expect(paint('M0 0 L200 0', {}, { grainAmount: 0 }, 0.5, paper)).toEqual(paint('M0 0 L200 0', {}, { grainAmount: 0 }, 0.5));
+    });
+
+    it('takes more paint from a light stroke than from a heavy one', () => {
+      expect(share(0.3)).toBeLessThan(share(0.9));
+      expect(share(1)).toBeCloseTo(1, 9);
+    });
+
+    it('keeps the peaks of the paper painted and leaves the valleys bare', () => {
+      const tuning = { grainAmount: 1, grainContrast: 6 };
+      expect(grainCoverage(0.9, 0.3, tuning)).toBe(1);
+      expect(grainCoverage(0.1, 0.3, tuning)).toBe(0);
+      expect(grainCoverage(0.1, 1, tuning)).toBe(1);
     });
   });
 });

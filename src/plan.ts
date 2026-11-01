@@ -1,10 +1,10 @@
-import { brushLine, type BristlePath, type BrushOptions } from './brush/brush';
+import { brushLine, type BristlePath, type BrushOptions, type Paper } from './brush/brush';
 import { flattenLine } from './geometry/flatten';
 import { splitAtCorners } from './geometry/split';
 import { orientLine } from './hand';
 import { applyToSubpath, scale } from './parse/matrix';
 import { linePressure } from './pressure';
-import { createNoise1D, createRandom } from './random';
+import { createNoise1D, createNoise2D, createRandom } from './random';
 import type { Tuning } from './tuning';
 import type { ParsedSvg } from './types';
 import { wobbleLine } from './wobble';
@@ -32,6 +32,9 @@ export function planPainting(
   const factor = width / parsed.width;
   const random = createRandom(seed);
   const paths: BristlePath[] = [];
+  // The paper is shared by all strokes. Lines use forks 0, 1, 2…, so the paper takes -1.
+  const grain = createNoise2D(Math.floor(random.fork(-1).next() * 4294967296));
+  const paper: Paper = (x, y) => (grain(x / tuning.grainSize, y / tuning.grainSize) + 1) / 2;
 
   parsed.lines.forEach((svgLine, index) => {
     const lineRandom = random.fork(index);
@@ -43,7 +46,7 @@ export function planPainting(
       const stroke = wobbleLine(orientLine(piece, brush.hand), tuning, wobble);
       const noise = createNoise1D(Math.floor(strokeRandom.fork(0).next() * 4294967296));
       const pressure = linePressure(stroke, brush.size, tuning, noise);
-      paths.push(...brushLine(stroke, pressure, brush, tuning, strokeRandom.fork(1)));
+      paths.push(...brushLine(stroke, pressure, brush, tuning, strokeRandom.fork(1), paper));
     });
   });
 

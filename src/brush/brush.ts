@@ -37,6 +37,25 @@ interface Bristle {
   gapNoise: (x: number) => number;
 }
 
+/**
+ * The height of the paper at a point, from 0 (a valley) to 1 (a peak). The
+ * same point must always give the same height, for every stroke.
+ */
+export type Paper = (x: number, y: number) => number;
+
+/** Perfectly smooth paper: no grain at all. */
+export const flatPaper: Paper = () => 1;
+
+/**
+ * How much of the paint reaches the paper at a spot, from 0 to 1. Heavy, wet
+ * paint (`load` near 1) covers everything. As the load drops, the valleys of
+ * the paper stay bare and only the peaks catch paint.
+ */
+export function grainCoverage(height: number, load: number, tuning: Pick<Tuning, 'grainAmount' | 'grainContrast'>): number {
+  const waterline = tuning.grainAmount * (1 - load);
+  return clamp01(1 - (waterline - height) * tuning.grainContrast);
+}
+
 /** The unit direction a flat brush's edge points in, on screen (y points down). A left hand mirrors it. */
 export function flatBrushAxis(hand: Hand, tuning: Pick<Tuning, 'flatBrushAngle'>): Point {
   const angle = (tuning.flatBrushAngle * Math.PI) / 180;
@@ -59,6 +78,7 @@ export function brushLine(
   options: BrushOptions,
   tuning: Tuning,
   random: Random,
+  paper: Paper = flatPaper,
 ): BristlePath[] {
   const bristles = createBristles(options, tuning, random);
   const width = Math.max(0.5, (options.size / tuning.bristleCount) * tuning.bristleWidth);
@@ -77,8 +97,12 @@ export function brushLine(
       const contact = clamp01((reachAtPressure - bristle.reach) / edgeSoftness + 0.5);
       const darkness = 1 + (p - 1) * tuning.pressureDarkness;
       const pooled = 1 + tuning.poolAmount * pool[i]!;
-      const alpha = Math.min(1, tuning.bristleOpacity * contact * darkness * pooled * paintLeft(bristle, point.distance, tuning));
-      return { x: point.x + bristle.offset.x, y: point.y + bristle.offset.y, alpha };
+      const left = paintLeft(bristle, point.distance, tuning);
+      const x = point.x + bristle.offset.x;
+      const y = point.y + bristle.offset.y;
+      const grain = grainCoverage(paper(x, y), p * left, tuning);
+      const alpha = Math.min(1, tuning.bristleOpacity * contact * darkness * pooled * left * grain);
+      return { x, y, alpha };
     }),
   }));
 }

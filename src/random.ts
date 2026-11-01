@@ -51,6 +51,26 @@ export function createNoise1D(seed: number): (x: number) => number {
   };
 }
 
+/**
+ * Smooth 2D noise in [-1, 1], like `createNoise1D` but over a plane. The
+ * pattern repeats roughly once per unit in each direction.
+ */
+export function createNoise2D(seed: number): (x: number, y: number) => number {
+  const base = seed >>> 0;
+  const lattice = (i: number, j: number): number => (mix(mix(base, i), j) / 4294967295) * 2 - 1;
+  const ease = (t: number) => t * t * (3 - 2 * t);
+
+  return (x, y) => {
+    const i = Math.floor(x);
+    const j = Math.floor(y);
+    const tx = ease(x - i);
+    const ty = ease(y - j);
+    const top = lattice(i, j) + (lattice(i + 1, j) - lattice(i, j)) * tx;
+    const bottom = lattice(i, j + 1) + (lattice(i + 1, j + 1) - lattice(i, j + 1)) * tx;
+    return top + (bottom - top) * ty;
+  };
+}
+
 /** Hashes text to a 32-bit unsigned integer (FNV-1a over UTF-16 code units). */
 export function hashText(text: string): number {
   let hash = 0x811c9dc5;
