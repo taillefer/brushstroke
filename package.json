@@ -1,0 +1,31 @@
+{
+  "name": "brushstroke",
+  "version": "0.0.0",
+  "description": "Paint SVG lines on a canvas as if drawn with a brush",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "module": "./dist/brushstroke.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/brushstroke.js"
+    }
+  },
+  "sideEffects": false,
+  "scripts": {
+    "dev": "vite --open /demo/index.html",
+    "build": "vite build && tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "private": true,
+  "devDependencies": {
+    "happy-dom": "^21.0.4",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5",
+    "vitest": "^5.0.5"
+  }
+}
