@@ -3,16 +3,22 @@ import type { Point } from '../types';
 import { POINT_SPACING, withDistances, type FlatLine, type LinePoint } from './flatten';
 
 /**
- * Splits a line into separate strokes at corners that turn more than
- * `splitAngle`, the way a person lifts the brush at a sharp corner. Each
- * piece runs on `splitOvershoot` pixels past the corners it touches, so the
- * strokes overlap a little.
+ * Splits a line into separate strokes at sharp corners, the way a person
+ * lifts the brush. Each piece runs on `splitOvershoot` pixels past the
+ * corners it touches, so the strokes overlap a little.
  *
- * Only marked corners can split a line, so a `splitAngle` below
- * `cornerAngle` splits at every corner.
+ * Closed shapes and open lines have separate limits. People often paint a
+ * rectangle as several strokes, but paint a zigzag or handwriting in one go
+ * and only lift the brush at a near-reversal.
+ *
+ * Only marked corners can split a line, so a limit below `cornerAngle`
+ * splits at every corner.
  */
-export function splitAtCorners(line: FlatLine, tuning: Pick<Tuning, 'splitAngle' | 'splitOvershoot'>): FlatLine[] {
-  const limit = (tuning.splitAngle * Math.PI) / 180;
+export function splitAtCorners(
+  line: FlatLine,
+  tuning: Pick<Tuning, 'splitAngleClosed' | 'splitAngleOpen' | 'splitOvershoot'>,
+): FlatLine[] {
+  const limit = ((line.closed ? tuning.splitAngleClosed : tuning.splitAngleOpen) * Math.PI) / 180;
   const { points } = line;
   const last = points.length - 1;
   const isSplit = (p: LinePoint, i: number) => p.corner && p.turn > limit && (line.closed || (i > 0 && i < last));

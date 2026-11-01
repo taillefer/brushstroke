@@ -70,8 +70,10 @@ export interface Tuning {
   /** How sharp the grain's speckles are. Higher values give harder edges. */
   grainContrast: number;
 
-  /** A corner that turns more than this, in degrees, splits the line into separate strokes. 180 never splits. */
-  splitAngle: number;
+  /** A corner of a closed shape that turns more than this, in degrees, splits it into separate strokes. 180 never splits. */
+  splitAngleClosed: number;
+  /** The same limit for open lines, such as a zigzag or handwriting. 180 never splits. */
+  splitAngleOpen: number;
   /** How far each stroke runs on past a corner where the line was split, in pixels. */
   splitOvershoot: number;
 
@@ -120,7 +122,8 @@ export const defaultTuning: Tuning = {
   grainSize: 2,
   grainContrast: 6,
 
-  splitAngle: 70,
+  splitAngleClosed: 70,
+  splitAngleOpen: 150,
   splitOvershoot: 3,
 
   flatBrushAngle: 45,
@@ -173,7 +176,8 @@ export const tuningRanges: Record<keyof Tuning, TuningFieldRange> = {
   grainSize: { min: 0.5, max: 12, step: 0.1 },
   grainContrast: { min: 1, max: 20, step: 0.5 },
 
-  splitAngle: { min: 5, max: 180, step: 1 },
+  splitAngleClosed: { min: 5, max: 180, step: 1 },
+  splitAngleOpen: { min: 5, max: 180, step: 1 },
   splitOvershoot: { min: 0, max: 20, step: 1 },
 
   flatBrushAngle: { min: 0, max: 90, step: 1 },

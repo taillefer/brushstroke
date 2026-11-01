@@ -27,8 +27,13 @@ describe('splitAtCorners', () => {
     ]);
   });
 
-  it('splits a zigzag into one stroke per straight part', () => {
-    expect(split('M0 0 L20 20 L40 0 L60 20')).toHaveLength(3);
+  it('keeps a zigzag as one stroke by default, but splits it with a lower open limit', () => {
+    expect(split('M0 0 L20 20 L40 0 L60 20')).toHaveLength(1);
+    expect(split('M0 0 L20 20 L40 0 L60 20', { splitAngleOpen: 80 })).toHaveLength(3);
+  });
+
+  it('splits an open line at a hairpin turn by default', () => {
+    expect(split('M0 0 L60 0 L0 6')).toHaveLength(2);
   });
 
   it('keeps a smooth curve whole', () => {
@@ -37,18 +42,19 @@ describe('splitAtCorners', () => {
     expect(split(d)[0]!.points).toEqual(flattenLine({ ...parsePathData(d)[0]!, color: 'black' }, resolveTuning()).points);
   });
 
-  it('does not split corners gentler than splitAngle', () => {
-    // The zigzag turns 90° at each corner.
-    expect(split('M0 0 L20 20 L40 0 L60 20', { splitAngle: 100 })).toHaveLength(1);
-    expect(split('M0 0 L20 20 L40 0 L60 20', { splitAngle: 80 })).toHaveLength(3);
+  it('does not split a closed shape at corners gentler than splitAngleClosed', () => {
+    // The square turns 90° at each corner.
+    expect(split('M0 0 H30 V30 H0 Z', { splitAngleClosed: 100 })).toHaveLength(1);
+    expect(split('M0 0 H30 V30 H0 Z', { splitAngleClosed: 80 })).toHaveLength(4);
   });
 
-  it('never splits with splitAngle 180', () => {
-    expect(split('M0 0 H30 V30 H0 Z', { splitAngle: 180 })).toHaveLength(1);
+  it('never splits with a limit of 180', () => {
+    expect(split('M0 0 H30 V30 H0 Z', { splitAngleClosed: 180 })).toHaveLength(1);
+    expect(split('M0 0 L60 0 L0 6', { splitAngleOpen: 180 })).toHaveLength(1);
   });
 
   it('runs each stroke splitOvershoot pixels past the corners it touches, but not past free ends', () => {
-    const [first, second] = split('M0 0 L50 0 L50 50', { splitOvershoot: 4 });
+    const [first, second] = split('M0 0 L50 0 L50 50', { splitOvershoot: 4, splitAngleOpen: 70 });
     expect(ends(first!)).toEqual([[0, 0], [54, 0]]);
     expect(ends(second!)).toEqual([[50, -4], [50, 50]]);
     expect(first!.length).toBeCloseTo(54, 6);

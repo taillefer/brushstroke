@@ -268,8 +268,16 @@ function load(): Saved | null {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const saved = JSON.parse(raw) as Saved;
-    // Fields added to Tuning after the save get their default value.
-    saved.panels = saved.panels.map((panel) => ({ ...defaultPanel(), ...panel, tuning: { ...defaultTuning, ...panel.tuning } }));
+    // Fields added to Tuning after the save get their default value, and fields
+    // that no longer exist are dropped, so a copied config still compiles.
+    saved.panels = saved.panels.map((panel) => {
+      const tuning = { ...defaultTuning };
+      for (const field of fields) {
+        const value = (panel.tuning as Partial<Tuning> | undefined)?.[field];
+        if (typeof value === 'number') tuning[field] = value;
+      }
+      return { ...defaultPanel(), ...panel, tuning };
+    });
     return saved;
   } catch {
     return null;
