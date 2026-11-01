@@ -1,3 +1,4 @@
+import { bumpAround, smoothstep } from './geometry/bump';
 import type { FlatLine } from './geometry/flatten';
 import type { Tuning } from './tuning';
 
@@ -21,9 +22,9 @@ export function linePressure(
   noise: (x: number) => number,
 ): number[] {
   const { points, length } = line;
-  const spread = Math.max(tuning.slowdownLength * brushSize, 1e-6);
-  const anchorBump = bumpAround(line, (p) => p.anchor, spread);
-  const cornerBump = bumpAround(line, (p) => p.corner, spread);
+  const spread = tuning.slowdownLength * brushSize;
+  const anchorBump = bumpAround(line, points.filter((p) => p.anchor).map((p) => p.distance), spread);
+  const cornerBump = bumpAround(line, points.filter((p) => p.corner).map((p) => p.distance), spread);
   const startLength = tuning.startTaperLength * brushSize;
   const endLength = tuning.endTaperLength * brushSize;
 
@@ -41,23 +42,6 @@ export function linePressure(
   });
 }
 
-/**
- * For every point, a value from 0 to 1 that is 1 at the marked points and
- * falls off smoothly to 0 at `spread` pixels from them.
- */
-function bumpAround(line: FlatLine, marked: (p: FlatLine['points'][number]) => boolean, spread: number): number[] {
-  const centres = line.points.filter(marked).map((p) => p.distance);
-  return line.points.map((p) => {
-    let best = 0;
-    for (const centre of centres) {
-      let gap = Math.abs(p.distance - centre);
-      if (line.closed) gap = Math.min(gap, line.length - gap);
-      if (gap < spread) best = Math.max(best, smooth(1 - gap / spread));
-    }
-    return best;
-  });
-}
-
 /** The vertical part of the travel direction at a point: 1 straight down, -1 straight up. */
 function travelDirectionY(line: FlatLine, i: number): number {
   const { points } = line;
@@ -72,11 +56,7 @@ function travelDirectionY(line: FlatLine, i: number): number {
 /** 0 at distance 0, rising smoothly to 1 at `length`. */
 function ramp(distance: number, length: number): number {
   if (length <= 0) return 1;
-  return smooth(Math.min(1, Math.max(0, distance / length)));
-}
-
-function smooth(t: number): number {
-  return t * t * (3 - 2 * t);
+  return smoothstep(Math.min(1, Math.max(0, distance / length)));
 }
 
 function mix(a: number, b: number, t: number): number {

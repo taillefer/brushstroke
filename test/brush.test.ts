@@ -85,4 +85,27 @@ describe('brushLine', () => {
     expect(alphaAt(400).some((a) => a === 0)).toBe(true);
     expect(alphaAt(500).every((a) => a === 0)).toBe(true);
   });
+
+  describe('paint pooling', () => {
+    // The strongest opacity among the bristles at point index `at`.
+    const darkest = (paths: BristlePath[], at: number) => Math.max(...paths.map((p) => p.points[at]!.alpha));
+    const noDarkening = { pressureDarkness: 0, bristleOpacity: 0.5 };
+
+    it('paints darker at the start of a stroke than in the middle', () => {
+      const paths = paint('M0 0 L200 0', {}, { ...noDarkening, poolAmount: 0.5 });
+      expect(darkest(paths, 0)).toBeGreaterThan(darkest(paths, 100) * 1.3);
+    });
+
+    it('paints darker at a corner than on the straight parts next to it', () => {
+      const paths = paint('M0 0 L100 0 L100 100', {}, { ...noDarkening, poolAmount: 0.5 });
+      expect(darkest(paths, 100)).toBeGreaterThan(darkest(paths, 60) * 1.3);
+      expect(darkest(paths, 100)).toBeGreaterThan(darkest(paths, 140) * 1.3);
+    });
+
+    it('changes nothing when poolAmount is 0', () => {
+      const paths = paint('M0 0 L100 0 L100 100', {}, { ...noDarkening, poolAmount: 0 });
+      expect(darkest(paths, 0)).toBeCloseTo(darkest(paths, 50), 9);
+      expect(darkest(paths, 100)).toBeCloseTo(darkest(paths, 50), 9);
+    });
+  });
 });

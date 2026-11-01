@@ -44,6 +44,11 @@ export interface Tuning {
   /** Distance between random pressure bumps, in pixels. */
   noiseWavelength: number;
 
+  /** Extra opacity where paint pools, at touch-down and at corners, as a share. */
+  poolAmount: number;
+  /** How far a pool of paint reaches, in brush widths. */
+  poolLength: number;
+
   /** Typical distance a bristle paints before it runs dry, in pixels. */
   dryDistance: number;
   /** How much the dry distance varies between bristles, from 0 (all equal) to 1. */
@@ -93,6 +98,9 @@ export const defaultTuning: Tuning = {
   noiseAmount: 0.08,
   noiseWavelength: 60,
 
+  poolAmount: 0.4,
+  poolLength: 0.6,
+
   dryDistance: 600,
   dryVariation: 0.5,
   dryFade: 0.5,
@@ -138,6 +146,9 @@ export const tuningRanges: Record<keyof Tuning, TuningFieldRange> = {
 
   noiseAmount: { min: 0, max: 0.5, step: 0.01 },
   noiseWavelength: { min: 5, max: 300, step: 1 },
+
+  poolAmount: { min: 0, max: 1.5, step: 0.01 },
+  poolLength: { min: 0, max: 3, step: 0.1 },
 
   dryDistance: { min: 50, max: 3000, step: 10 },
   dryVariation: { min: 0, max: 1, step: 0.01 },

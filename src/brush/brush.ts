@@ -1,3 +1,4 @@
+import { bumpAround } from '../geometry/bump';
 import type { FlatLine } from '../geometry/flatten';
 import type { Hand } from '../hand';
 import { createNoise1D, type Random } from '../random';
@@ -63,6 +64,9 @@ export function brushLine(
   const width = Math.max(0.5, (options.size / tuning.bristleCount) * tuning.bristleWidth);
   // The edge of the mark fades over the space between two bristles, so it is soft rather than stepped.
   const edgeSoftness = 0.5 / tuning.bristleCount;
+  // Paint pools where the brush touches down and where it pauses at a corner.
+  const poolCentres = [0, ...line.points.filter((p) => p.corner).map((p) => p.distance)];
+  const pool = bumpAround(line, poolCentres, tuning.poolLength * options.size);
 
   return bristles.map((bristle) => ({
     color: line.color,
@@ -72,7 +76,8 @@ export function brushLine(
       const reachAtPressure = (tuning.minimumWidth + (1 - tuning.minimumWidth) * p) / 2;
       const contact = clamp01((reachAtPressure - bristle.reach) / edgeSoftness + 0.5);
       const darkness = 1 + (p - 1) * tuning.pressureDarkness;
-      const alpha = tuning.bristleOpacity * contact * darkness * paintLeft(bristle, point.distance, tuning);
+      const pooled = 1 + tuning.poolAmount * pool[i]!;
+      const alpha = Math.min(1, tuning.bristleOpacity * contact * darkness * pooled * paintLeft(bristle, point.distance, tuning));
       return { x: point.x + bristle.offset.x, y: point.y + bristle.offset.y, alpha };
     }),
   }));
