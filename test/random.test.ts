@@ -74,12 +74,14 @@ describe('createNoise2D', () => {
 
   it('is smooth in both directions', () => {
     const noise = createNoise2D(5);
+    // One assertion on the largest step: an expect per sample is slow enough to time out under load.
+    let largest = 0;
     for (let x = 0; x < 6; x += 0.05) {
       for (let y = 0; y < 6; y += 0.05) {
-        expect(Math.abs(noise(x + 0.01, y) - noise(x, y))).toBeLessThan(0.05);
-        expect(Math.abs(noise(x, y + 0.01) - noise(x, y))).toBeLessThan(0.05);
+        largest = Math.max(largest, Math.abs(noise(x + 0.01, y) - noise(x, y)), Math.abs(noise(x, y + 0.01) - noise(x, y)));
       }
     }
+    expect(largest).toBeLessThan(0.05);
   });
 });
 
