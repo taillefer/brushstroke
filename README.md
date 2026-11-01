@@ -2,6 +2,18 @@
 
 Paint the lines of an SVG on a canvas as if they were drawn with a brush.
 
+## Install
+
+brushstroke is not on npm. Install it from git at a version tag:
+
+```sh
+npm install github:taillefer/brushstroke#v0.1.0
+```
+
+npm builds `dist/` during the install (the `prepare` script). The repository is private, so the machine that installs it, including CI, needs read access to it.
+
+## Painting an SVG
+
 ```ts
 import { paintSvg } from 'brushstroke';
 
