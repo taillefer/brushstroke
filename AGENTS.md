@@ -28,7 +28,9 @@ The pipeline runs in this order. Every step before drawing is a plain function w
 7. Turn each stroke into bristle paths, with paint pooling, dryness and paper grain (`src/brush/`).
 8. Draw the bristle paths on a canvas (`src/render.ts`).
 
-`src/plan.ts` runs steps 1–7 and `src/paintSvg.ts` adds loading and drawing. The paper grain belongs to the whole painting, not to one stroke, so it stays in place across strokes.
+The public API has two levels (see `docs/adr/0001-paint-lines-as-well-as-svg.md`). `paintLines` (`src/paintLines.ts`) paints lines the caller already holds onto an existing context: steps 2–8. `paintSvg` (`src/paintSvg.ts`) loads and parses an SVG, then sizes and clears a canvas and runs the same steps. `planLines` in `src/plan.ts` runs steps 2–7 for both, and `drawPaths` in `src/render.ts` does step 8.
+
+Scaling is applied to the geometry before step 2, never to the canvas, so every look number stays in output pixels. An offset is applied only when drawing, so it moves finished strokes without changing them. The paper grain belongs to the whole painting, not to one stroke, so it stays in place across strokes.
 
 Two rules hold across the code:
 

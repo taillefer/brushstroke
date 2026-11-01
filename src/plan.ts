@@ -6,7 +6,7 @@ import { applyToSubpath, scale } from './parse/matrix';
 import { linePressure } from './pressure';
 import { createNoise1D, createNoise2D, createRandom, lineSeedNumber } from './random';
 import type { Tuning } from './tuning';
-import type { ParsedSvg } from './types';
+import type { ParsedSvg, SvgLine } from './types';
 import { wobbleLine } from './wobble';
 
 export interface PaintingPlan {
@@ -17,11 +17,7 @@ export interface PaintingPlan {
   paths: BristlePath[];
 }
 
-/**
- * Everything up to drawing: scales the SVG to the output width, and turns
- * every line into bristle paths. No DOM or canvas is involved, so the result
- * is the same in every browser and in Node.
- */
+/** Plans a whole SVG, scaled to the output width. */
 export function planPainting(
   parsed: ParsedSvg,
   seed: number,
@@ -30,6 +26,19 @@ export function planPainting(
   tuning: Tuning,
 ): PaintingPlan {
   const factor = width / parsed.width;
+  return { width, height: parsed.height * factor, paths: planLines(parsed.lines, seed, factor, brush, tuning) };
+}
+
+/**
+ * Everything up to drawing: scales the lines by `factor`, and turns every
+ * line into bristle paths. No DOM or canvas is involved, so the result is the
+ * same in every browser and in Node.
+ *
+ * The look is worked out in the scaled coordinates. Brush size, wobble and
+ * paper grain are in output pixels, so zooming in moves the strokes apart
+ * instead of making the bristles thicker.
+ */
+export function planLines(lines: SvgLine[], seed: number, factor: number, brush: BrushOptions, tuning: Tuning): BristlePath[] {
   const random = createRandom(seed);
   const paths: BristlePath[] = [];
   // The paper is shared by all strokes. Lines without a seed use forks 0, 1, 2…
@@ -38,7 +47,7 @@ export function planPainting(
   const grain = createNoise2D(Math.floor(random.fork(-1).next() * 4294967296));
   const paper: Paper = (x, y) => (grain(x / tuning.grainSize, y / tuning.grainSize) + 1) / 2;
 
-  parsed.lines.forEach((svgLine, index) => {
+  lines.forEach((svgLine, index) => {
     const lineRandom = svgLine.seed === undefined ? random.fork(index) : seeded.fork(lineSeedNumber(svgLine.seed));
     const scaled = { ...applyToSubpath(scale(factor, factor), svgLine), color: svgLine.color };
     // Each piece of a split line is its own stroke, with its own randomness.
@@ -52,5 +61,5 @@ export function planPainting(
     });
   });
 
-  return { width, height: parsed.height * factor, paths };
+  return paths;
 }

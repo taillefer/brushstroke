@@ -1,4 +1,8 @@
+import type { BristlePath } from './brush/brush';
 import type { PaintingPlan } from './plan';
+
+/** A 2D context of an on-screen or offscreen canvas. */
+export type PaintContext = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 
 // Opacity changes along a bristle are drawn in this many steps. Neighbouring
 // pieces with the same step share one canvas path, which keeps drawing fast.
@@ -15,11 +19,20 @@ export function drawPlan(canvas: HTMLCanvasElement, plan: PaintingPlan, pixelRat
   if (!context) throw new Error('brushstroke: the canvas has no 2D context');
   context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
   context.clearRect(0, 0, plan.width, plan.height);
+  drawPaths(context, plan.paths);
+}
+
+/**
+ * Draws bristle paths in the context's current transform, on top of what is
+ * already there. The context's state is restored afterwards.
+ */
+export function drawPaths(context: PaintContext, paths: BristlePath[]): void {
+  context.save();
   // Butt caps: round caps would leave darker dots where two pieces of one bristle meet.
   context.lineCap = 'butt';
   context.lineJoin = 'round';
 
-  for (const path of plan.paths) {
+  for (const path of paths) {
     context.strokeStyle = path.color;
     context.lineWidth = path.width;
     let step = 0;
@@ -50,5 +63,5 @@ export function drawPlan(canvas: HTMLCanvasElement, plan: PaintingPlan, pixelRat
     }
     flush();
   }
-  context.globalAlpha = 1;
+  context.restore();
 }

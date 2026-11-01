@@ -1,22 +1,13 @@
-import type { BrushKind } from './brush/brush';
-import type { Hand } from './hand';
+import { resolveBrush, type BrushStyle } from './paintLines';
 import { parseSvg } from './parse/svg';
 import { planPainting } from './plan';
 import { resolveSeed } from './random';
 import { drawPlan } from './render';
-import { resolveTuning, type Tuning } from './tuning';
+import { resolveTuning } from './tuning';
 
-export interface PaintOptions {
-  /** 'flat' (default) or 'round'. */
-  brush?: BrushKind;
-  /** Brush width in CSS pixels. Default 12. */
-  size?: number;
-  /** The painter's hand. Default 'right'. */
-  hand?: Hand;
+export interface PaintOptions extends BrushStyle {
   /** Seed for the random variations. Default: a hash of the SVG text. */
   seed?: number;
-  /** Fine control over the look, on top of `defaultTuning`. */
-  tuning?: Partial<Tuning>;
   /** Paint on this canvas instead of creating one. It is resized and cleared. */
   canvas?: HTMLCanvasElement;
   /** Output width in CSS pixels. Default: the SVG's own width. The height keeps the SVG's proportions. */
@@ -24,8 +15,6 @@ export interface PaintOptions {
 }
 
 export type SvgSource = string | URL | SVGSVGElement;
-
-const DEFAULT_SIZE = 12;
 
 /**
  * Paints the lines of an SVG on a canvas, as if drawn with a brush.
@@ -39,7 +28,7 @@ export async function paintSvg(source: SvgSource, options: PaintOptions = {}): P
     parsed,
     resolveSeed(text, options.seed),
     options.width ?? parsed.width,
-    { brush: options.brush ?? 'flat', size: options.size ?? DEFAULT_SIZE, hand: options.hand ?? 'right' },
+    resolveBrush(options),
     resolveTuning(options.tuning),
   );
   const canvas = options.canvas ?? document.createElement('canvas');
