@@ -2,8 +2,6 @@
 
 Paint the lines of an SVG on a canvas as if they were drawn with a brush.
 
-> Work in progress. The API below is the target for v1 and is not implemented yet.
-
 ```ts
 import { paintSvg } from 'brushstroke';
 
@@ -28,6 +26,28 @@ document.body.append(canvas);
 | `width` | from the SVG | Output width in CSS pixels. |
 
 Only lines are painted: `path`, `line`, `polyline`, `polygon`, `rect`, `circle` and `ellipse`. Shapes that have a fill and no stroke are skipped. Each line uses its stroke colour, or black.
+
+## Parsing without painting
+
+`parseSvg(text)` turns SVG text into lines without painting them. It needs a `DOMParser`, so it runs in browsers. Use it to parse once and keep the geometry, for example to store it in your own format.
+
+```ts
+import { parseSvg, type ParsedSvg } from 'brushstroke';
+
+const parsed: ParsedSvg = parseSvg(svgText);
+// { width: 120, height: 80, lines: [{ start, segments, closed, color }, …] }
+```
+
+The result is plain data that can be stored as JSON:
+
+| Type | Fields |
+|------|--------|
+| `ParsedSvg` | `width` and `height` of the SVG in CSS pixels, and `lines` in document order. |
+| `SvgLine` | One continuous line: `start` (a `Point`), `segments`, `closed`, and `color`. |
+| `Segment` | `{ kind: 'line', to }` or `{ kind: 'cubic', c1, c2, to }`. Arcs and quadratic curves are converted to cubics. |
+| `Point` | `{ x, y }`. |
+
+Transforms and the viewBox are already applied, so coordinates are in the SVG's CSS pixels.
 
 ## Development
 
