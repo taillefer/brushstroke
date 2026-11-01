@@ -53,6 +53,11 @@ export interface Tuning {
   /** Typical length of the gaps a drying bristle leaves, in pixels. */
   dryGapLength: number;
 
+  /** A corner that turns more than this, in degrees, splits the line into separate strokes. 180 never splits. */
+  splitAngle: number;
+  /** How far each stroke runs on past a corner where the line was split, in pixels. */
+  splitOvershoot: number;
+
   /** Angle of a flat brush for a right hand, in degrees. A left hand mirrors it. */
   flatBrushAngle: number;
   /** Thickness of a flat brush's edge, as a share of its width. */
@@ -87,6 +92,9 @@ export const defaultTuning: Tuning = {
   dryVariation: 0.5,
   dryFade: 0.5,
   dryGapLength: 8,
+
+  splitAngle: 70,
+  splitOvershoot: 3,
 
   flatBrushAngle: 45,
   flatBrushThickness: 0.15,
@@ -127,6 +135,9 @@ export const tuningRanges: Record<keyof Tuning, TuningFieldRange> = {
   dryVariation: { min: 0, max: 1, step: 0.01 },
   dryFade: { min: 0, max: 2, step: 0.01 },
   dryGapLength: { min: 1, max: 50, step: 1 },
+
+  splitAngle: { min: 5, max: 180, step: 1 },
+  splitOvershoot: { min: 0, max: 20, step: 1 },
 
   flatBrushAngle: { min: 0, max: 90, step: 1 },
   flatBrushThickness: { min: 0.02, max: 1, step: 0.01 },

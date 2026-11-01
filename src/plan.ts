@@ -1,5 +1,6 @@
 import { brushLine, type BristlePath, type BrushOptions } from './brush/brush';
 import { flattenLine } from './geometry/flatten';
+import { splitAtCorners } from './geometry/split';
 import { orientLine } from './hand';
 import { applyToSubpath, scale } from './parse/matrix';
 import { linePressure } from './pressure';
@@ -34,10 +35,14 @@ export function planPainting(
   parsed.lines.forEach((svgLine, index) => {
     const lineRandom = random.fork(index);
     const scaled = { ...applyToSubpath(scale(factor, factor), svgLine), color: svgLine.color };
-    const line = orientLine(flattenLine(scaled, tuning), brush.hand);
-    const noise = createNoise1D(Math.floor(lineRandom.fork(0).next() * 4294967296));
-    const pressure = linePressure(line, brush.size, tuning, noise);
-    paths.push(...brushLine(line, pressure, brush, tuning, lineRandom.fork(1)));
+    // Each piece of a split line is its own stroke, with its own randomness.
+    splitAtCorners(flattenLine(scaled, tuning), tuning).forEach((piece, pieceIndex) => {
+      const strokeRandom = lineRandom.fork(pieceIndex);
+      const stroke = orientLine(piece, brush.hand);
+      const noise = createNoise1D(Math.floor(strokeRandom.fork(0).next() * 4294967296));
+      const pressure = linePressure(stroke, brush.size, tuning, noise);
+      paths.push(...brushLine(stroke, pressure, brush, tuning, strokeRandom.fork(1)));
+    });
   });
 
   return { width, height: parsed.height * factor, paths };

@@ -13,8 +13,10 @@ export interface LinePoint extends Point {
   distance: number;
   /** True for an anchor point of the SVG: the start, or the end of a segment. */
   anchor: boolean;
-  /** True where the line turns sharply. */
+  /** True where the line turns sharply: the sharpest point of a turn larger than `cornerAngle`. */
   corner: boolean;
+  /** How much the line turns at this point, in radians, measured over a few pixels. */
+  turn: number;
 }
 
 export interface FlatLine {
@@ -29,7 +31,7 @@ export interface FlatLine {
  * marks the anchors and the corners.
  */
 export function flattenLine(line: SvgLine, tuning: Pick<Tuning, 'cornerAngle'>): FlatLine {
-  const points: LinePoint[] = [{ ...line.start, distance: 0, anchor: true, corner: false }];
+  const points: LinePoint[] = [{ ...line.start, distance: 0, anchor: true, corner: false, turn: 0 }];
   let from = line.start;
   let distance = 0;
 
@@ -41,7 +43,7 @@ export function flattenLine(line: SvgLine, tuning: Pick<Tuning, 'cornerAngle'>):
     for (let i = 1; i <= count; i++) {
       const target = (length * i) / count;
       const point = i === count ? segment.to : pointAtLength(dense, lengths, target);
-      points.push({ ...point, distance: distance + target, anchor: i === count, corner: false });
+      points.push({ ...point, distance: distance + target, anchor: i === count, corner: false, turn: 0 });
     }
     distance += length;
     from = segment.to;
@@ -118,6 +120,9 @@ function markCorners(points: LinePoint[], closed: boolean, cornerAngle: number):
     const b = Math.atan2(after.y - point.y, after.x - point.x);
     return Math.abs(Math.atan2(Math.sin(b - a), Math.cos(b - a)));
   });
+
+  turns.forEach((turn, i) => (points[i]!.turn = turn));
+  if (closed && count > 0) points[count]!.turn = turns[0]!;
 
   for (let i = 0; i < count; i++) {
     const turn = turns[i]!;
