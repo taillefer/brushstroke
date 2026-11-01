@@ -20,11 +20,15 @@ Only lines are painted. Elements that have a fill and no stroke are skipped. The
 The pipeline runs in this order. Every step before drawing is a plain function with no canvas, so it can be tested in Node.
 
 1. Parse the SVG text into lines with their stroke colour (`src/parse/`).
-2. Flatten each line into points about 1 px apart, and mark anchors and corners (`src/geometry/`).
-3. Orient each line for the painter's hand (`src/hand.ts`).
-4. Give each point a pressure (`src/pressure.ts`).
-5. Turn each line into bristle paths (`src/brush/`).
-6. Draw the bristle paths on a canvas (`src/render.ts`).
+2. Flatten each line into points about 1 px apart, and mark anchors and corners (`src/geometry/flatten.ts`).
+3. Split each line into separate strokes at sharp corners (`src/geometry/split.ts`). From here on, each piece is its own stroke with its own forked randomness.
+4. Orient each stroke for the painter's hand (`src/hand.ts`).
+5. Add hand wobble: a small sideways drift (`src/wobble.ts`).
+6. Give each point a pressure (`src/pressure.ts`).
+7. Turn each stroke into bristle paths, with paint pooling, dryness and paper grain (`src/brush/`).
+8. Draw the bristle paths on a canvas (`src/render.ts`).
+
+`src/plan.ts` runs steps 1–7 and `src/paintSvg.ts` adds loading and drawing. The paper grain belongs to the whole painting, not to one stroke, so it stays in place across strokes.
 
 Two rules hold across the code:
 
