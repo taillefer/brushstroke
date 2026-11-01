@@ -4,7 +4,7 @@ import { splitAtCorners } from './geometry/split';
 import { orientLine } from './hand';
 import { applyToSubpath, scale } from './parse/matrix';
 import { linePressure } from './pressure';
-import { createNoise1D, createNoise2D, createRandom } from './random';
+import { createNoise1D, createNoise2D, createRandom, lineSeedNumber } from './random';
 import type { Tuning } from './tuning';
 import type { ParsedSvg } from './types';
 import { wobbleLine } from './wobble';
@@ -32,12 +32,14 @@ export function planPainting(
   const factor = width / parsed.width;
   const random = createRandom(seed);
   const paths: BristlePath[] = [];
-  // The paper is shared by all strokes. Lines use forks 0, 1, 2…, so the paper takes -1.
+  // The paper is shared by all strokes. Lines without a seed use forks 0, 1, 2…
+  // by position, the paper takes -1, and lines with their own seed fork from -2.
+  const seeded = random.fork(-2);
   const grain = createNoise2D(Math.floor(random.fork(-1).next() * 4294967296));
   const paper: Paper = (x, y) => (grain(x / tuning.grainSize, y / tuning.grainSize) + 1) / 2;
 
   parsed.lines.forEach((svgLine, index) => {
-    const lineRandom = random.fork(index);
+    const lineRandom = svgLine.seed === undefined ? random.fork(index) : seeded.fork(lineSeedNumber(svgLine.seed));
     const scaled = { ...applyToSubpath(scale(factor, factor), svgLine), color: svgLine.color };
     // Each piece of a split line is its own stroke, with its own randomness.
     splitAtCorners(flattenLine(scaled, tuning), tuning).forEach((piece, pieceIndex) => {

@@ -19,9 +19,15 @@ export interface Subpath {
   closed: boolean;
 }
 
-/** One line to paint, in output pixels, with its colour. */
+/** One line to paint, with its colour. */
 export interface SvgLine extends Subpath {
   color: string;
+  /**
+   * Keeps this line's random variations stable when other lines are added or
+   * removed, for example an object id. Without it, a line's variations depend
+   * on its position in the list.
+   */
+  seed?: string | number;
 }
 
 export interface ParsedSvg {

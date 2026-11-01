@@ -86,6 +86,11 @@ export function resolveSeed(svgText: string, seed?: number): number {
   return seed === undefined ? hashText(svgText) : seed >>> 0;
 }
 
+/** A line's own seed as a 32-bit unsigned integer: numbers as they are, text hashed. */
+export function lineSeedNumber(seed: string | number): number {
+  return typeof seed === 'string' ? hashText(seed) : seed >>> 0;
+}
+
 // Combines two integers into a well-spread 32-bit unsigned integer
 // (the murmur3 finaliser over a simple combination).
 function mix(a: number, b: number): number {

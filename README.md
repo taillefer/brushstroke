@@ -25,6 +25,12 @@ document.body.append(canvas);
 | `canvas` | a new canvas | Paint on this canvas instead of creating one. |
 | `width` | from the SVG | Output width in CSS pixels. |
 
+### Keeping lines stable when the SVG changes
+
+Each line's small variations come from the seed and the line's position in the SVG. Adding an element moves every element after it, so those repaint differently. To keep an element's look, give it an `id`: its lines then take their variations from the seed and the id, wherever they are in the file.
+
+That only helps with a fixed `seed`. The default seed is a hash of the SVG text, so any edit to the file changes it, and every line repaints.
+
 Only lines are painted: `path`, `line`, `polyline`, `polygon`, `rect`, `circle` and `ellipse`. Shapes that have a fill and no stroke are skipped. Each line uses its stroke colour, or black.
 
 ## Parsing without painting
@@ -43,9 +49,11 @@ The result is plain data that can be stored as JSON:
 | Type | Fields |
 |------|--------|
 | `ParsedSvg` | `width` and `height` of the SVG in CSS pixels, and `lines` in document order. |
-| `SvgLine` | One continuous line: `start` (a `Point`), `segments`, `closed`, and `color`. |
+| `SvgLine` | One continuous line: `start` (a `Point`), `segments`, `closed`, `color`, and an optional `seed`. |
 | `Segment` | `{ kind: 'line', to }` or `{ kind: 'cubic', c1, c2, to }`. Arcs and quadratic curves are converted to cubics. |
 | `Point` | `{ x, y }`. |
+
+A line's `seed` (a string or a number) keeps its variations stable when other lines are added or removed. `parseSvg` sets it from the element's `id`; later subpaths of the same element get `id/1`, `id/2` and so on.
 
 Transforms and the viewBox are already applied, so coordinates are in the SVG's CSS pixels.
 

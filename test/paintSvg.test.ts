@@ -27,7 +27,7 @@ describe('planPainting', () => {
   });
 
   it('uses an explicit seed instead of the hash', () => {
-    expect(plan(SVG, 42)).toEqual(plan(SVG.replace('<circle', '<circle id="c"'), 42));
+    expect(plan(SVG, 42)).toEqual(plan(SVG.replace('<circle', '<!-- edited --><circle'), 42));
     expect(plan(SVG, 42)).not.toEqual(plan(SVG));
   });
 

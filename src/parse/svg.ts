@@ -45,7 +45,14 @@ export function parseSvgTree(root: SvgNode): ParsedSvg {
     if (!subpaths) return;
     const color = lineColor(paint);
     if (color === null) return;
-    for (const subpath of subpaths) lines.push({ ...applyToSubpath(matrix, subpath), color });
+    // An element's id keeps its lines' look stable when other elements change.
+    // Later subpaths of the same element get the id plus their position.
+    const id = node.attributes.id?.trim();
+    subpaths.forEach((subpath, i) => {
+      const line: SvgLine = { ...applyToSubpath(matrix, subpath), color };
+      if (id) line.seed = i === 0 ? id : `${id}/${i}`;
+      lines.push(line);
+    });
   };
 
   visit(root, viewport.matrix, rootPaintContext, true);
