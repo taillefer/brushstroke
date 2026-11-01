@@ -1,0 +1,122 @@
+// Every number that shapes the look of a painting. Code elsewhere reads these
+// values and must not add look-related constants of its own. The tuning page
+// (demo/tune.html) is where new defaults get chosen.
+
+export interface Tuning {
+  /** Number of bristles across the brush. */
+  bristleCount: number;
+  /** How far a bristle may sit from its even spot, as a share of the brush width. */
+  bristleJitter: number;
+  /** Opacity of one bristle at full pressure. */
+  bristleOpacity: number;
+  /** Width of the painted mark at zero pressure, as a share of the full width. */
+  minimumWidth: number;
+
+  /** Pressure along the middle of a line, before anchors, corners, direction and noise. */
+  basePressure: number;
+  /** Pressure at the very first point. */
+  touchDownPressure: number;
+  /** Pressure at the very last point. */
+  liftOffPressure: number;
+  /** Length of the touch-down, in brush widths. */
+  startTaperLength: number;
+  /** Length of the lift-off, in brush widths. */
+  endTaperLength: number;
+
+  /** Extra pressure at an anchor point of the SVG. */
+  anchorPressure: number;
+  /** Extra pressure at a corner. */
+  cornerPressure: number;
+  /** A point is a corner when the line turns by more than this, in degrees. */
+  cornerAngle: number;
+  /** How far the extra pressure around anchors and corners spreads, in brush widths. */
+  slowdownLength: number;
+
+  /** Pressure difference between pulling the brush down and pushing it up. */
+  directionPressure: number;
+
+  /** Size of the random pressure changes. */
+  noiseAmount: number;
+  /** Distance between random pressure bumps, in pixels. */
+  noiseWavelength: number;
+
+  /** Typical distance a bristle paints before it runs dry, in pixels. */
+  dryDistance: number;
+  /** How much the dry distance varies between bristles, from 0 (all equal) to 1. */
+  dryVariation: number;
+
+  /** Angle of a flat brush for a right hand, in degrees. A left hand mirrors it. */
+  flatBrushAngle: number;
+  /** Thickness of a flat brush's edge, as a share of its width. */
+  flatBrushThickness: number;
+}
+
+export const defaultTuning: Tuning = {
+  bristleCount: 24,
+  bristleJitter: 0.15,
+  bristleOpacity: 0.6,
+  minimumWidth: 0.2,
+
+  basePressure: 0.75,
+  touchDownPressure: 0.3,
+  liftOffPressure: 0.1,
+  startTaperLength: 1,
+  endTaperLength: 1.5,
+
+  anchorPressure: 0.1,
+  cornerPressure: 0.25,
+  cornerAngle: 35,
+  slowdownLength: 0.8,
+
+  directionPressure: 0.15,
+
+  noiseAmount: 0.08,
+  noiseWavelength: 60,
+
+  dryDistance: 600,
+  dryVariation: 0.5,
+
+  flatBrushAngle: 45,
+  flatBrushThickness: 0.15,
+};
+
+export interface TuningFieldRange {
+  min: number;
+  max: number;
+  step: number;
+}
+
+/** Slider ranges for the tuning page. Every field of `Tuning` has one. */
+export const tuningRanges: Record<keyof Tuning, TuningFieldRange> = {
+  bristleCount: { min: 4, max: 64, step: 1 },
+  bristleJitter: { min: 0, max: 0.5, step: 0.01 },
+  bristleOpacity: { min: 0.05, max: 1, step: 0.01 },
+  minimumWidth: { min: 0, max: 1, step: 0.01 },
+
+  basePressure: { min: 0, max: 1, step: 0.01 },
+  touchDownPressure: { min: 0, max: 1, step: 0.01 },
+  liftOffPressure: { min: 0, max: 1, step: 0.01 },
+  startTaperLength: { min: 0, max: 5, step: 0.1 },
+  endTaperLength: { min: 0, max: 5, step: 0.1 },
+
+  anchorPressure: { min: 0, max: 0.5, step: 0.01 },
+  cornerPressure: { min: 0, max: 0.5, step: 0.01 },
+  cornerAngle: { min: 5, max: 120, step: 1 },
+  slowdownLength: { min: 0, max: 3, step: 0.1 },
+
+  directionPressure: { min: 0, max: 0.5, step: 0.01 },
+
+  noiseAmount: { min: 0, max: 0.5, step: 0.01 },
+  noiseWavelength: { min: 5, max: 300, step: 1 },
+
+  dryDistance: { min: 50, max: 3000, step: 10 },
+  dryVariation: { min: 0, max: 1, step: 0.01 },
+
+  flatBrushAngle: { min: 0, max: 90, step: 1 },
+  flatBrushThickness: { min: 0.02, max: 1, step: 0.01 },
+};
+
+/** `defaultTuning` with the caller's values on top. */
+export function resolveTuning(overrides: Partial<Tuning> = {}): Tuning {
+  return { ...defaultTuning, ...overrides };
+}
