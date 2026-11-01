@@ -7,6 +7,7 @@ import { linePressure } from './pressure';
 import { createNoise1D, createRandom } from './random';
 import type { Tuning } from './tuning';
 import type { ParsedSvg } from './types';
+import { wobbleLine } from './wobble';
 
 export interface PaintingPlan {
   /** Output size in CSS pixels. */
@@ -38,7 +39,8 @@ export function planPainting(
     // Each piece of a split line is its own stroke, with its own randomness.
     splitAtCorners(flattenLine(scaled, tuning), tuning).forEach((piece, pieceIndex) => {
       const strokeRandom = lineRandom.fork(pieceIndex);
-      const stroke = orientLine(piece, brush.hand);
+      const wobble = createNoise1D(Math.floor(strokeRandom.fork(2).next() * 4294967296));
+      const stroke = wobbleLine(orientLine(piece, brush.hand), tuning, wobble);
       const noise = createNoise1D(Math.floor(strokeRandom.fork(0).next() * 4294967296));
       const pressure = linePressure(stroke, brush.size, tuning, noise);
       paths.push(...brushLine(stroke, pressure, brush, tuning, strokeRandom.fork(1)));

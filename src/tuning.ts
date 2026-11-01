@@ -53,6 +53,11 @@ export interface Tuning {
   /** Typical length of the gaps a drying bristle leaves, in pixels. */
   dryGapLength: number;
 
+  /** Largest sideways drift of the hand from the SVG path, in pixels. */
+  wobbleAmount: number;
+  /** Distance between the bends of the drift, in pixels. */
+  wobbleWavelength: number;
+
   /** A corner that turns more than this, in degrees, splits the line into separate strokes. 180 never splits. */
   splitAngle: number;
   /** How far each stroke runs on past a corner where the line was split, in pixels. */
@@ -92,6 +97,9 @@ export const defaultTuning: Tuning = {
   dryVariation: 0.5,
   dryFade: 0.5,
   dryGapLength: 8,
+
+  wobbleAmount: 1.5,
+  wobbleWavelength: 120,
 
   splitAngle: 70,
   splitOvershoot: 3,
@@ -135,6 +143,9 @@ export const tuningRanges: Record<keyof Tuning, TuningFieldRange> = {
   dryVariation: { min: 0, max: 1, step: 0.01 },
   dryFade: { min: 0, max: 2, step: 0.01 },
   dryGapLength: { min: 1, max: 50, step: 1 },
+
+  wobbleAmount: { min: 0, max: 10, step: 0.1 },
+  wobbleWavelength: { min: 10, max: 600, step: 5 },
 
   splitAngle: { min: 5, max: 180, step: 1 },
   splitOvershoot: { min: 0, max: 20, step: 1 },
