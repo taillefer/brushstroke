@@ -106,6 +106,25 @@ A line's `seed` (a string or a number) keeps its variations stable when other li
 
 Transforms and the viewBox are already applied, so coordinates are in the SVG's CSS pixels.
 
+## Fills and strokes
+
+`parseSvgDrawing(text)` reads an SVG the way a browser paints it, for callers that draw the shapes themselves. It keeps filled shapes, which `parseSvg` skips. A shape with no paint set is filled black and has no stroke, as in browsers.
+
+```ts
+import { parseSvgDrawing } from 'brushstroke';
+
+const drawing = parseSvgDrawing(svgText);
+// { width, height, shapes: [{ type: 'fill', subpaths, color, rule }, { type: 'stroke', subpaths, color, width }, …] }
+```
+
+| Type | Fields |
+|------|--------|
+| `ParsedSvgDrawing` | `width` and `height` of the SVG in CSS pixels, and `shapes` in paint order. |
+| `SvgFill` | `type: 'fill'`, `subpaths` that fill together, `color`, and `rule` (`nonzero` or `evenodd`). |
+| `SvgStroke` | `type: 'stroke'`, `subpaths`, `color`, and `width` in CSS pixels after transforms. |
+
+An element with both a fill and a stroke gives the fill first. Colors are returned as written in the SVG, for example `red` or `rgb(0 0 0)`.
+
 ## Development
 
 ```sh

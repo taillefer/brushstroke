@@ -56,7 +56,7 @@ export function lineColor(context: PaintContext): string | null {
   return resolveColor(stroke, context.color);
 }
 
-function resolveColor(value: string, color: string | undefined): string {
+export function resolveColor(value: string, color: string | undefined): string {
   if (value === 'currentColor') return color ?? 'black';
   // Gradients and patterns are not supported. Use the fallback colour after the url(...) if there is one.
   if (value.startsWith('url(')) {

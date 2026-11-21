@@ -30,6 +30,33 @@ export interface SvgLine extends Subpath {
   seed?: string | number;
 }
 
+/** A filled shape. All subpaths fill together with the fill rule, so inner subpaths can be holes. */
+export interface SvgFill {
+  type: 'fill';
+  subpaths: Subpath[];
+  color: string;
+  rule: 'nonzero' | 'evenodd';
+}
+
+/** A stroked outline. `width` is in CSS pixels, scaled by the element's transform. */
+export interface SvgStroke {
+  type: 'stroke';
+  subpaths: Subpath[];
+  color: string;
+  width: number;
+}
+
+export type SvgShape = SvgFill | SvgStroke;
+
+/** An SVG read as a drawing: fills and strokes as a browser would paint them. */
+export interface ParsedSvgDrawing {
+  /** Size of the SVG in CSS pixels. */
+  width: number;
+  height: number;
+  /** Shapes in paint order. */
+  shapes: SvgShape[];
+}
+
 export interface ParsedSvg {
   /** Size of the SVG in CSS pixels. */
   width: number;

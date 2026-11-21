@@ -13,16 +13,21 @@ export interface SvgNode {
 
 // Elements whose children are drawn. Nested <svg> elements are treated as
 // plain groups: their own viewport and viewBox are not applied.
-const CONTAINERS = new Set(['g', 'a', 'svg', 'switch']);
+export const CONTAINERS = new Set(['g', 'a', 'svg', 'switch']);
 
 /** Parses SVG text into lines. Needs a global DOMParser, as in browsers. */
 export function parseSvg(text: string): ParsedSvg {
+  return parseSvgTree(parseSvgText(text));
+}
+
+/** Parses SVG text into an element tree. Throws if the text is not an SVG document. */
+export function parseSvgText(text: string): SvgNode {
   const document = new DOMParser().parseFromString(text, 'image/svg+xml');
   const root = document.documentElement;
   if (root.getElementsByTagName('parsererror').length > 0 || root.localName !== 'svg') {
     throw new Error('brushstroke: the text is not a valid SVG document');
   }
-  return parseSvgTree(fromDom(root));
+  return fromDom(root);
 }
 
 /** Parses an element tree whose root is an <svg> element into lines. */
