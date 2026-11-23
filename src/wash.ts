@@ -523,7 +523,12 @@ export function paintWashStrokes(context: PaintContext, rings: Point[][], color:
     transform: { scale, x, y },
     anchorScale: scale,
     bounds: area,
-    tuning: { dryDistance: Math.max(1, strokes.dryness * strokes.length) },
+    tuning: {
+      dryDistance: Math.max(1, strokes.dryness * strokes.length),
+      // Fill strokes are many and narrow: fewer bristles and points paint them several times faster.
+      lodBristleSpacing: strokes.bristleSpacing,
+      lodPointSpacing: strokes.pointSpacing,
+    },
   });
   context.restore();
 }

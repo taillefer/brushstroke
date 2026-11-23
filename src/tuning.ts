@@ -310,6 +310,14 @@ export interface WashStrokes {
   load: number;
   /** Strokes per load of paint, on average. */
   loadCycle: number;
+  /**
+   * Smallest distance between bristles across the brush, in pixels, as
+   * `Tuning.lodBristleSpacing`. A narrow brush gets fewer bristles, which
+   * paints much faster and looks the same once they are closer than a pixel. 0 is off.
+   */
+  bristleSpacing: number;
+  /** Distance between the points of a stroke, as a share of the brush width, as `Tuning.lodPointSpacing`. 0 is off. */
+  pointSpacing: number;
 }
 
 /**
@@ -411,6 +419,8 @@ export const defaultWashTuning: WashTuning = {
     flowDistance: 70,
     load: 0.3,
     loadCycle: 4,
+    bristleSpacing: 1,
+    pointSpacing: 0.25,
   },
   edge: { width: 12, alpha: 0.2, falloff: 2.5, steps: 10 },
   edgeColor: [40, 28, 16],
