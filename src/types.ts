@@ -34,16 +34,26 @@ export interface SvgLine extends Subpath {
 export interface SvgFill {
   type: 'fill';
   subpaths: Subpath[];
+  /** `#rrggbb`. Any alpha in the colour is in `opacity`. */
   color: string;
   rule: 'nonzero' | 'evenodd';
+  /** From 0 to 1: `opacity` of the element and its groups, times `fill-opacity`, times the colour's alpha. */
+  opacity: number;
 }
 
 /** A stroked outline. `width` is in CSS pixels, scaled by the element's transform. */
 export interface SvgStroke {
   type: 'stroke';
   subpaths: Subpath[];
+  /** `#rrggbb`. Any alpha in the colour is in `opacity`. */
   color: string;
   width: number;
+  /** From 0 to 1: `opacity` of the element and its groups, times `stroke-opacity`, times the colour's alpha. */
+  opacity: number;
+  /** `stroke-linecap`, default `butt`. */
+  linecap: 'butt' | 'round' | 'square';
+  /** `stroke-linejoin`, default `miter`. SVG 2's `miter-clip` and `arcs` are read as `miter`. */
+  linejoin: 'miter' | 'round' | 'bevel';
 }
 
 export type SvgShape = SvgFill | SvgStroke;

@@ -3,6 +3,7 @@ import { applyToSubpath, multiply, parseTransform, type Matrix } from './matrix'
 import { shapeToSubpaths } from './shapes';
 import { childPaintContext, isDisplayNone, lineColor, rootPaintContext, type PaintContext } from './style';
 import { rootViewport } from './viewport';
+import { readXml } from './xml';
 
 /** A minimal element tree, so the parser can run without a DOM. */
 export interface SvgNode {
@@ -15,19 +16,24 @@ export interface SvgNode {
 // plain groups: their own viewport and viewBox are not applied.
 export const CONTAINERS = new Set(['g', 'a', 'svg', 'switch']);
 
-/** Parses SVG text into lines. Needs a global DOMParser, as in browsers. */
+/** Parses SVG text into lines. Needs no DOM, so it runs in Node and in workers too. */
 export function parseSvg(text: string): ParsedSvg {
   return parseSvgTree(parseSvgText(text));
 }
 
-/** Parses SVG text into an element tree. Throws if the text is not an SVG document. */
+/**
+ * Parses SVG text into an element tree, with the library's own XML reader.
+ * Throws if the text is not well-formed XML or its root is not an <svg> element.
+ */
 export function parseSvgText(text: string): SvgNode {
-  const document = new DOMParser().parseFromString(text, 'image/svg+xml');
-  const root = document.documentElement;
-  if (root.getElementsByTagName('parsererror').length > 0 || root.localName !== 'svg') {
-    throw new Error('brushstroke: the text is not a valid SVG document');
+  let root: SvgNode;
+  try {
+    root = readXml(text);
+  } catch (error) {
+    throw new Error(`brushstroke: the text is not a valid SVG document: ${(error as Error).message}`);
   }
-  return fromDom(root);
+  if (root.name !== 'svg') throw new Error('brushstroke: the text is not a valid SVG document: the root element is not <svg>');
+  return root;
 }
 
 /** Parses an element tree whose root is an <svg> element into lines. */
@@ -62,14 +68,4 @@ export function parseSvgTree(root: SvgNode): ParsedSvg {
 
   visit(root, viewport.matrix, rootPaintContext, true);
   return { width: viewport.width, height: viewport.height, lines };
-}
-
-function fromDom(element: Element): SvgNode {
-  const attributes: Record<string, string> = {};
-  for (const attribute of Array.from(element.attributes)) attributes[attribute.name] = attribute.value;
-  return {
-    name: element.localName,
-    attributes,
-    children: Array.from(element.children, fromDom),
-  };
 }
