@@ -7,10 +7,10 @@ Paint the lines of an SVG on a canvas as if they were drawn with a brush.
 brushstroke is not on npm. Install it from the public GitHub repository at a version tag:
 
 ```sh
-npm install github:taillefer/brushstroke#v0.3.0
+npm install github:taillefer/brushstroke#v0.4.0
 ```
 
-npm builds `dist/` during the install (the `prepare` script). The functions marked *since 0.3.0* below need `#v0.3.0` or later; with `#v0.2.0` only the others are there.
+npm builds `dist/` during the install (the `prepare` script). The functions marked *since 0.4.0* below need `#v0.4.0` or later, and those marked *since 0.3.0* need `#v0.3.0` or later.
 
 ## Painting an SVG
 
