@@ -7,11 +7,14 @@
 // while a map pans or zooms, and finer blotches fade in as it zooms in. See
 // docs/adr/0003-wash-texture-in-octaves.md.
 
-import type { LineTransform } from './paintLines';
-import { createRandom } from './random';
+import { paintLines, type LineTransform } from './paintLines';
 import type { PaintContext } from './render';
-import { defaultWashTuning, type WashEdge, type WashLayer, type WashTuning } from './tuning';
-import type { Point } from './types';
+import { contourStrokes, hatchArea } from './geometry/hatch';
+import { parseColor } from './parse/color';
+import { createRandom, hashText } from './random';
+import type { Rect } from './strokePlan';
+import { defaultWashTuning, type WashEdge, type WashGradient, type WashLayer, type WashPigment, type WashStrokes, type WashTuning } from './tuning';
+import type { Point, SvgLine } from './types';
 
 /** Smooth step from 0 to 1 with zero slope and curvature at both ends. */
 function fade(t: number): number {
@@ -164,6 +167,68 @@ export function edgeSteps(edge: Pick<WashEdge, 'width' | 'alpha' | 'falloff' | '
   return steps;
 }
 
+type Rgb = { r: number; g: number; b: number };
+
+function toRgb(color: string): Rgb {
+  const hex = parseColor(color)?.hex ?? '#000000';
+  return { r: parseInt(hex.slice(1, 3), 16), g: parseInt(hex.slice(3, 5), 16), b: parseInt(hex.slice(5, 7), 16) };
+}
+
+const toHex = ({ r, g, b }: Rgb) => `#${[r, g, b].map((v) => Math.round(Math.min(255, Math.max(0, v))).toString(16).padStart(2, '0')).join('')}`;
+
+/**
+ * A colour as a painter could mix it: less saturated, lighter, and pulled
+ * towards one shared undertone, so colours picked on a screen sit together
+ * like paint from one box. Returns #rrggbb.
+ */
+export function pigment(color: string, settings: WashPigment = defaultWashTuning.pigment): string {
+  const { r, g, b } = toRgb(color);
+  // Saturation is taken out by moving each channel towards the colour's own grey.
+  const grey = 0.299 * r + 0.587 * g + 0.114 * b;
+  const muted = { r: grey + (r - grey) * (1 - settings.mute), g: grey + (g - grey) * (1 - settings.mute), b: grey + (b - grey) * (1 - settings.mute) };
+  const light = { r: muted.r + (255 - muted.r) * settings.lighten, g: muted.g + (255 - muted.g) * settings.lighten, b: muted.b + (255 - muted.b) * settings.lighten };
+  const [ur, ug, ub] = settings.undertone;
+  const t = settings.undertoneAmount;
+  return toHex({ r: light.r + (ur - light.r) * t, g: light.g + (ug - light.g) * t, b: light.b + (ub - light.b) * t });
+}
+
+export interface PaintGradientOptions {
+  /** Maps line coordinates to canvas pixels, as in `paintLines`. */
+  transform?: LineTransform;
+}
+
+/**
+ * A soft band of `color` inside the area, strongest along `edges` and fading
+ * inward over `gradient.width` line units. `edges` are the rings the band
+ * follows, such as an island's shore but not the map's border. The band is
+ * clipped to the area.
+ */
+export function paintEdgeGradient(context: PaintContext, rings: Point[][], edges: Point[][], color: string, gradient: WashGradient, options: PaintGradientOptions = {}): void {
+  const { scale = 1, x = 0, y = 0 } = options.transform ?? {};
+  const steps = edgeSteps({ width: gradient.width * scale, alpha: gradient.amount, falloff: gradient.falloff, steps: gradient.steps });
+  if (steps.length === 0 || edges.length === 0) return;
+  const toPath = (list: Point[][]) => {
+    const path = new Path2D();
+    for (const ring of list) {
+      ring.forEach((p, i) => (i === 0 ? path.moveTo(p.x * scale + x, p.y * scale + y) : path.lineTo(p.x * scale + x, p.y * scale + y)));
+      path.closePath();
+    }
+    return path;
+  };
+  const area = toPath(rings);
+  const edge = toPath(edges);
+  const { r, g, b } = toRgb(color);
+  context.save();
+  context.clip(area, 'evenodd');
+  context.lineJoin = 'round';
+  for (const step of steps) {
+    context.lineWidth = step.reach * 2;
+    context.strokeStyle = `rgba(${r}, ${g}, ${b}, ${step.alpha})`;
+    context.stroke(edge);
+  }
+  context.restore();
+}
+
 export interface PaintWashOptions {
   /** Maps line coordinates to canvas pixels, as in `paintLines`. Default `{ scale: 1, x: 0, y: 0 }`. */
   transform?: LineTransform;
@@ -173,6 +238,16 @@ export interface PaintWashOptions {
   tuning?: Partial<WashTuning>;
   /** Leave out parts, for comparing. All default to true. */
   layers?: { fill?: boolean; edge?: boolean; wash?: boolean; grain?: boolean };
+  /**
+   * Lay the fill as a transparent glaze (multiplied, at `tuning.glaze`) over
+   * what is under it, normally paper, so the paper shows through. Default false.
+   */
+  glaze?: boolean;
+  /**
+   * The rings that are real edges, where paint pools. Default all of
+   * `rings`. Leave out a border that is not an edge, such as the map's frame.
+   */
+  edges?: Point[][];
 }
 
 type TileCanvas = OffscreenCanvas | HTMLCanvasElement;
@@ -194,21 +269,26 @@ function makeCanvas(size: number): TileCanvas | undefined {
 const tileCache = new Map<string, TileCanvas | null>();
 const TILE_CACHE_SIZE = 24;
 
-function tile(layer: WashLayer, index: number, size: number): TileCanvas | null {
-  const seed = (layer.seed + Math.imul(index, 7919)) >>> 0;
-  const key = JSON.stringify([seed, size, layer.cells, layer.ink, layer.paper, layer.missed, layer.missedRim]);
+/** A tile from the cache, or made with `paint` and kept under `key`. */
+function cachedTile(key: string, size: number, paint: (context: PaintContext) => boolean): TileCanvas | null {
   const cached = tileCache.get(key);
   if (cached !== undefined) return cached;
   const canvas = makeCanvas(size);
   const context = canvas?.getContext('2d') as PaintContext | null | undefined;
-  let made: TileCanvas | null = null;
-  if (canvas && context && typeof ImageData !== 'undefined') {
-    context.putImageData(new ImageData(tilePixels(noiseTile(seed, size, Math.max(1, Math.round(layer.cells))), layer), size, size), 0, 0);
-    made = canvas;
-  }
+  const made = canvas && context && paint(context) ? canvas : null;
   if (tileCache.size >= TILE_CACHE_SIZE) tileCache.delete(tileCache.keys().next().value!);
   tileCache.set(key, made);
   return made;
+}
+
+function noiseLayerTile(layer: WashLayer, index: number, size: number): TileCanvas | null {
+  const seed = (layer.seed + Math.imul(index, 7919)) >>> 0;
+  const key = JSON.stringify(['noise', seed, size, layer.cells, layer.ink, layer.paper, layer.missed, layer.missedRim]);
+  return cachedTile(key, size, (context) => {
+    if (typeof ImageData === 'undefined') return false;
+    context.putImageData(new ImageData(tilePixels(noiseTile(seed, size, Math.max(1, Math.round(layer.cells))), layer), size, size), 0, 0);
+    return true;
+  });
 }
 
 const patternCache = new WeakMap<object, Map<TileCanvas, CanvasPattern | null>>();
@@ -237,13 +317,24 @@ function canvasArea(context: PaintContext): { x: number; y: number; width: numbe
   return { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y };
 }
 
-function drawLayer(context: PaintContext, transform: Required<LineTransform>, layer: WashLayer, seed: number, tileSize: number): void {
+/**
+ * Fills the current clip with a layer's visible octaves, each tile laid over
+ * the line coordinates at 2^k units and drawn at its octave's weight.
+ */
+function drawLayer(
+  context: PaintContext,
+  transform: Required<LineTransform>,
+  band: { fromPx: number; toPx: number; tiles: number },
+  tileFor: (index: number) => TileCanvas | null,
+  seed: number,
+  tileSize: number,
+): void {
   if (typeof DOMMatrix === 'undefined') return;
-  const tiles = Math.max(1, Math.round(layer.tiles));
+  const tiles = Math.max(1, Math.round(band.tiles));
   const base = context.globalAlpha;
   const area = canvasArea(context);
-  for (const { k, weight } of visibleOctaves(transform.scale, layer)) {
-    const source = tile(layer, ((k % tiles) + tiles) % tiles, tileSize);
+  for (const { k, weight } of visibleOctaves(transform.scale, band)) {
+    const source = tileFor(((k % tiles) + tiles) % tiles);
     const fill = source && pattern(context, source);
     if (!fill) continue;
     const m = octaveMatrix(transform, k, octaveOffset(seed, k), tileSize);
@@ -267,8 +358,10 @@ export function paintWashTexture(context: PaintContext, options: PaintWashOption
   const transform = { scale: 1, x: 0, y: 0, ...options.transform };
   const seed = (options.seed ?? 0) >>> 0;
   const layers = options.layers ?? {};
-  if (layers.wash !== false) drawLayer(context, transform, tuning.wash, seed, tuning.tileSize);
-  if (layers.grain !== false) drawLayer(context, transform, tuning.grain, (seed ^ 0x1f2e3d) >>> 0, tuning.tileSize);
+  const size = tuning.tileSize;
+  const { wash, grain } = tuning;
+  if (layers.wash !== false) drawLayer(context, transform, wash, (i) => noiseLayerTile(wash, i, size), seed, size);
+  if (layers.grain !== false) drawLayer(context, transform, grain, (i) => noiseLayerTile(grain, i, size), (seed ^ 0x1f2e3d) >>> 0, size);
 }
 
 /**
@@ -290,10 +383,23 @@ export function paintWash(context: PaintContext, rings: Point[][], color: string
   }
   context.save();
   if (layers.fill !== false) {
+    context.save();
     context.fillStyle = color;
+    if (options.glaze) {
+      context.globalCompositeOperation = 'multiply';
+      context.globalAlpha *= tuning.glaze;
+    }
     context.fill(path, 'evenodd');
+    context.restore();
   }
   context.clip(path, 'evenodd');
+  const edgePath = options.edges ? new Path2D() : path;
+  if (options.edges) {
+    for (const ring of options.edges) {
+      ring.forEach((p, i) => (i === 0 ? edgePath.moveTo(p.x * scale + x, p.y * scale + y) : edgePath.lineTo(p.x * scale + x, p.y * scale + y)));
+      edgePath.closePath();
+    }
+  }
   if (layers.edge !== false) {
     context.lineJoin = 'round';
     const [r, g, b] = tuning.edgeColor;
@@ -301,9 +407,123 @@ export function paintWash(context: PaintContext, rings: Point[][], color: string
       // Half the line is outside the clip, so it is twice as wide as the band that shows.
       context.lineWidth = step.reach * 2;
       context.strokeStyle = `rgba(${r}, ${g}, ${b}, ${step.alpha})`;
-      context.stroke(path);
+      context.stroke(edgePath);
     }
   }
   paintWashTexture(context, options);
+  context.restore();
+}
+
+/** `color` moved `amount` (0 to 1) of the way towards `to`, as #rrggbb. */
+function mixColor(color: Rgb, to: readonly number[], amount: number): string {
+  const channel = (from: number, target: number) => Math.round(from + (target - from) * amount).toString(16).padStart(2, '0');
+  return `#${channel(color.r, to[0]!)}${channel(color.g, to[1]!)}${channel(color.b, to[2]!)}`;
+}
+
+/**
+ * The strokes `paintWashStrokes` paints for one area, in line units: the edge
+ * strokes first, then the fill strokes, each with its own shade of `color`
+ * and its own width in canvas pixels. `scale` is the canvas pixels per line
+ * unit the lengths in `strokes` are measured at. `bounds` (line units) leaves
+ * out strokes that cannot reach into it.
+ */
+export function washStrokeLines(
+  rings: Point[][],
+  color: string,
+  strokes: WashStrokes,
+  scale: number,
+  options: { seed?: string | number; bounds?: Rect; edges?: Point[][] } = {},
+): SvgLine[] {
+  if (!(scale > 0)) return [];
+  const rgb = toRgb(color);
+  const prefix = `${options.seed ?? ''}${strokes.seed}`;
+  const edge = strokes.contour
+    ? contourStrokes(rings, { inset: strokes.contourInset / scale, length: strokes.contourLength / scale, seed: `${prefix}c`, ...(options.edges ? { edges: options.edges } : {}) })
+    : [];
+  const fill = hatchArea(rings, {
+    spacing: strokes.spacing / scale,
+    length: strokes.length / scale,
+    angle: strokes.angle,
+    angleJitter: strokes.angleJitter,
+    bend: strokes.bend,
+    overlap: strokes.overlap,
+    inset: strokes.inset / scale,
+    flow: strokes.flow,
+    flowDistance: strokes.flowDistance / scale,
+    ...(options.edges ? { flowEdges: options.edges } : {}),
+    loadCycle: strokes.load > 0 ? strokes.loadCycle : 0,
+    seed: `${prefix}h`,
+    ...(options.bounds ? { bounds: options.bounds } : {}),
+  });
+  return [...edge, ...fill].map((line) => {
+    const own = createRandom(hashText(String(line.seed)));
+    const light = own.next() < strokes.light;
+    // A fresh load of paint is darker; the last strokes before the next dip are lighter.
+    const load = 'load' in line && typeof line.load === 'number' ? strokes.load * (line.load - 0.35) : 0;
+    const shift = (light ? 1 : -1) * strokes.shade * own.next() + load;
+    const { load: _, ...plain } = line as SvgLine & { load?: number };
+    return {
+      ...plain,
+      color: mixColor(rgb, shift >= 0 ? strokes.paper : strokes.ink, Math.min(1, Math.abs(shift))),
+      width: strokes.width * (0.85 + 0.3 * own.next()),
+    };
+  });
+}
+
+export interface PaintWashStrokesOptions {
+  /** Maps line coordinates to canvas pixels, as in `paintLines`. Default `{ scale: 1, x: 0, y: 0 }`. */
+  transform?: LineTransform;
+  /** Put before the strokes' seeds, so two maps differ. The grid of strokes does not depend on it. */
+  seed?: string | number;
+  /** The look, on top of `defaultWashTuning`. */
+  tuning?: Partial<WashTuning>;
+  /** The rings that are real edges: edge strokes follow them and fill strokes turn along them. Default all of `rings`. */
+  edges?: Point[][];
+}
+
+/**
+ * Paints brush strokes inside one area: strokes along its edge, then rows of
+ * strokes that start and end inside it, each a shade of `color`. Nothing
+ * reaches past the edge: the strokes are cut inside it and the paint is
+ * clipped to it.
+ *
+ * The strokes lie on a grid fixed to the line coordinates, so they stay in
+ * place when the view pans, and when an area changes only strokes at the
+ * changed edge change. Their lengths in `WashTuning.strokes` are canvas
+ * pixels at `transform.scale`, and the brush's noise is anchored at that
+ * scale too. To keep them still while a view zooms, paint them at a few
+ * zoom steps and scale the result between steps.
+ *
+ * `paintLines` sets the opacity of every bristle itself, so
+ * `strokes.opacity` is for the caller to apply when it composites the
+ * strokes, for example from a tile.
+ */
+export function paintWashStrokes(context: PaintContext, rings: Point[][], color: string, options: PaintWashStrokesOptions = {}): void {
+  const tuning = { ...defaultWashTuning, ...options.tuning };
+  const { strokes } = tuning;
+  const { scale = 1, x = 0, y = 0 } = options.transform ?? {};
+  const area = canvasArea(context);
+  const bounds = { x: (area.x - x) / scale, y: (area.y - y) / scale, width: area.width / scale, height: area.height / scale };
+  const lines = washStrokeLines(rings, color, strokes, scale, {
+    ...(options.seed !== undefined ? { seed: options.seed } : {}),
+    ...(options.edges ? { edges: options.edges } : {}),
+    bounds,
+  });
+  if (lines.length === 0) return;
+  const path = new Path2D();
+  for (const ring of rings) {
+    ring.forEach((p, i) => (i === 0 ? path.moveTo(p.x * scale + x, p.y * scale + y) : path.lineTo(p.x * scale + x, p.y * scale + y)));
+    path.closePath();
+  }
+  context.save();
+  context.clip(path, 'evenodd');
+  paintLines(context, lines, {
+    brush: strokes.brush,
+    size: strokes.width,
+    transform: { scale, x, y },
+    anchorScale: scale,
+    bounds: area,
+    tuning: { dryDistance: Math.max(1, strokes.dryness * strokes.length) },
+  });
   context.restore();
 }

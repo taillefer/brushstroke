@@ -1,7 +1,10 @@
 import {
   defaultWashTuning,
   paintLines,
+  paintEdgeGradient,
   paintWash,
+  paintWashStrokes,
+  pigment,
   paintWashTexture,
   smoothLine,
   visibleOctaves,
@@ -9,13 +12,14 @@ import {
   type Point,
   type SvgLine,
   type WashColor,
-  type WashLayer,
   type WashTuning,
 } from '../src/index';
 
 // ── The map ─────────────────────────────────────────────────────────────────
 // A small world in map units, painted the way a map app would: each area's
-// fill and edge on its own, then the texture once over the whole map.
+// fill and edge on its own, then its brush strokes (from cached tiles), then
+// the texture once over the whole map. Areas do not overlap: like terrain in
+// the map app, each one is cut out of the area around it.
 
 const WORLD = { width: 1000, height: 700 };
 const COLORS = { sea: '#2f7fd1', field: '#5cbf4a', forest: '#2e8b3d', mountain: '#9a8f84', coast: '#3a3226' };
@@ -31,13 +35,35 @@ function blob(cx: number, cy: number, radius: number, waves: [number, number, nu
 
 const island = blob(480, 360, 240, [[2, 0.12, 0.4], [3, 0.1, 1.9], [5, 0.05, 0.3], [9, 0.025, 2.2], [17, 0.012, 1]]);
 const lake = blob(545, 265, 34, [[2, 0.2, 1], [3, 0.08, 0.2]], 60);
-const areas: { rings: Point[][]; color: string }[] = [
-  { rings: [[{ x: 0, y: 0 }, { x: WORLD.width, y: 0 }, { x: WORLD.width, y: WORLD.height }, { x: 0, y: WORLD.height }]], color: COLORS.sea },
-  { rings: [island], color: COLORS.field },
-  { rings: [blob(390, 300, 95, [[2, 0.2, 0.7], [3, 0.12, 2.5], [7, 0.04, 0.1]])], color: COLORS.forest },
-  { rings: [blob(590, 450, 80, [[2, 0.15, 2], [4, 0.1, 0.5], [6, 0.05, 1.2]])], color: COLORS.mountain },
-  { rings: [lake], color: COLORS.sea },
+const forest = blob(390, 300, 95, [[2, 0.2, 0.7], [3, 0.12, 2.5], [7, 0.04, 0.1]]);
+const mountain = blob(590, 450, 80, [[2, 0.15, 2], [4, 0.1, 0.5], [6, 0.05, 1.2]]);
+/** `shore` are the rings the depth gradient follows: real shores and borders, not the map's own edge. */
+const frame: Point[] = [{ x: 0, y: 0 }, { x: WORLD.width, y: 0 }, { x: WORLD.width, y: WORLD.height }, { x: 0, y: WORLD.height }];
+const areaList: { rings: Point[][]; color: string; seed: string; water: boolean; shore: Point[][] }[] = [
+  { rings: [frame, island], color: COLORS.sea, seed: 'sea', water: true, shore: [island] },
+  { rings: [island, forest, mountain, lake], color: COLORS.field, seed: 'field', water: false, shore: [island, lake] },
+  { rings: [forest], color: COLORS.forest, seed: 'forest', water: false, shore: [forest] },
+  { rings: [mountain], color: COLORS.mountain, seed: 'mountain', water: false, shore: [mountain] },
+  { rings: [lake], color: COLORS.sea, seed: 'lake', water: true, shore: [lake] },
 ];
+/** `edges` are an area's real edges: every ring but the map's frame, which gets no pooled paint or edge strokes. */
+const areas = areaList.map((area) => ({ ...area, edges: area.rings.filter((ring) => ring !== frame) }));
+
+/** The colour an area is painted in: its own, or as a pigment. */
+const areaColor = (area: { color: string }) => (state.show.palette ? pigment(area.color, state.tuning.pigment) : area.color);
+const rgbHex = (c: readonly number[]) => `#${c.slice(0, 3).map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')}`;
+
+/** The stroke settings with the step-2 parts that are switched off set to nothing. */
+function strokeTuning(): WashTuning {
+  const { tuning, show } = state;
+  return { ...tuning, strokes: { ...tuning.strokes, flow: show.flow ? tuning.strokes.flow : 0, load: show.load ? tuning.strokes.load : 0 } };
+}
+/** Each area's box, to skip it on tiles it does not reach. */
+const areaBoxes = areas.map(({ rings }) => {
+  const xs = rings[0]!.map((p) => p.x);
+  const ys = rings[0]!.map((p) => p.y);
+  return { x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) };
+});
 const coastLines: SvgLine[] = [island, lake].map((ring, i) => ({
   start: ring[0]!,
   segments: smoothLine(ring, { closed: true }),
@@ -52,9 +78,15 @@ const MAX_LINE_PX = 15000;
 // ── State ───────────────────────────────────────────────────────────────────
 
 interface Show {
+  palette: boolean;
+  glaze: boolean;
+  depth: boolean;
+  flow: boolean;
+  load: boolean;
   fill: boolean;
   edge: boolean;
   wash: boolean;
+  strokes: boolean;
   grain: boolean;
   lines: boolean;
   anchorLines: boolean;
@@ -68,7 +100,7 @@ interface Saved {
 
 const STORAGE_KEY = 'brushstroke-wash';
 const copyTuning = (t: WashTuning): WashTuning => JSON.parse(JSON.stringify(t)) as WashTuning;
-const defaultShow: Show = { fill: true, edge: true, wash: true, grain: true, lines: true, anchorLines: true, anchorScreen: false };
+const defaultShow: Show = { palette: true, glaze: true, depth: true, flow: true, load: true, fill: true, edge: true, wash: false, strokes: true, grain: false, lines: true, anchorLines: true, anchorScreen: false };
 const state: Saved = load() ?? { tuning: copyTuning(defaultWashTuning), show: { ...defaultShow } };
 
 const canvas = document.querySelector<HTMLCanvasElement>('#map')!;
@@ -105,16 +137,28 @@ function paint(): void {
   context.save();
   context.fillStyle = '#e9e2d2';
   context.fillRect(0, 0, viewport.width, viewport.height);
-
-  for (const area of areas) {
-    paintWash(context, area.rings, area.color, { transform: view, tuning, layers: { fill: show.fill, edge: show.edge, wash: false, grain: false } });
+  if (show.glaze) {
+    // The paper the map is painted on; the glazed fills let it show through.
+    context.fillStyle = rgbHex(tuning.paper);
+    context.fillRect(view.x, view.y, WORLD.width * view.scale, WORLD.height * view.scale);
   }
 
-  // The texture once, over the whole map.
+  for (const area of areas) {
+    paintWash(context, area.rings, areaColor(area), { transform: view, tuning, glaze: show.glaze, edges: area.edges, layers: { fill: show.fill, edge: show.edge, wash: false, grain: false } });
+  }
+  if (show.depth) {
+    for (const area of areas) {
+      paintEdgeGradient(context, area.rings, area.shore, area.water ? rgbHex(tuning.paper) : rgbHex(tuning.edgeColor), area.water ? tuning.shallow : tuning.landRim, { transform: view });
+    }
+  }
+
   context.save();
   context.beginPath();
   context.rect(view.x, view.y, WORLD.width * view.scale, WORLD.height * view.scale);
   context.clip();
+  const strokesNote = show.strokes ? drawStrokeTiles(view, started) : '';
+
+  // The texture once, over the whole map.
   paintWashTexture(context, {
     // Anchored to the screen, the texture stays put while the map moves under it: the effect to avoid.
     transform: show.anchorScreen ? { scale: 1, x: 0, y: 0 } : view,
@@ -143,11 +187,90 @@ function paint(): void {
   }
   context.restore();
 
-  const describe = (name: string, layer: WashLayer) =>
+  const describe = (name: string, layer: { fromPx: number; toPx: number }) =>
     `${name}: ${visibleOctaves(show.anchorScreen ? 1 : view.scale, layer)
       .map((o) => `2^${o.k} (${Math.round(o.weight * 100)}%)`)
       .join(', ')}`;
-  octavesText.textContent = `scale ${view.scale.toFixed(3)} px/unit · ${describe('blotches', tuning.wash)} · ${describe('grain', tuning.grain)} · ${(performance.now() - started).toFixed(1)} ms${linesNote}`;
+  octavesText.textContent = `scale ${view.scale.toFixed(3)} px/unit · ${describe('blotches', tuning.wash)} · ${describe('grain', tuning.grain)}${strokesNote} · ${(performance.now() - started).toFixed(1)} ms${linesNote}`;
+}
+
+// ── Stroke tiles ────────────────────────────────────────────────────────────
+// Brush strokes are too slow to paint every frame. They are painted into
+// tiles at zoom steps of 2^level canvas pixels per map unit, kept, and drawn
+// scaled while the zoom is between steps. Near the next step, its tiles fade
+// in. A tile is TILE_PX pixels at its step's scale.
+
+const TILE_PX = 512;
+/** Share of a zoom step over which the next step's tiles fade in. */
+const STEP_FADE = 0.35;
+/** Tiles kept; the oldest go first. */
+const MAX_TILES = 48;
+/** Time per frame spent painting new tiles, in ms. Tiles not painted yet come in the next frames. */
+const TILE_BUDGET_MS = 12;
+
+const tiles = new Map<string, HTMLCanvasElement>();
+let tilesFor = '';
+
+function strokeTile(level: number, i: number, j: number): HTMLCanvasElement {
+  const ratio = Math.min(window.devicePixelRatio || 1, 1.5);
+  const tile = document.createElement('canvas');
+  tile.width = tile.height = Math.round(TILE_PX * ratio);
+  const g = tile.getContext('2d')!;
+  g.setTransform(ratio, 0, 0, ratio, 0, 0);
+  const scale = 2 ** level;
+  const world = { x0: (i * TILE_PX) / scale, y0: (j * TILE_PX) / scale, x1: ((i + 1) * TILE_PX) / scale, y1: ((j + 1) * TILE_PX) / scale };
+  areas.forEach((area, n) => {
+    const box = areaBoxes[n]!;
+    if (box.x1 < world.x0 || box.x0 > world.x1 || box.y1 < world.y0 || box.y0 > world.y1) return;
+    paintWashStrokes(g, area.rings, areaColor(area), { transform: { scale, x: -i * TILE_PX, y: -j * TILE_PX }, seed: area.seed, tuning: strokeTuning(), edges: area.edges });
+  });
+  return tile;
+}
+
+/** Draws the stroke tiles of the zoom steps that show, painting missing ones within the time budget. */
+function drawStrokeTiles(view: Required<LineTransform>, started: number): string {
+  const key = JSON.stringify([strokeTuning().strokes, state.show.palette && state.tuning.pigment]);
+  if (key !== tilesFor) {
+    tiles.clear();
+    tilesFor = key;
+  }
+  const zoom = Math.log2(view.scale);
+  const level = Math.floor(zoom);
+  const t = zoom - level;
+  const next = Math.min(1, Math.max(0, (t - (1 - STEP_FADE)) / STEP_FADE));
+  const fadeIn = next * next * (3 - 2 * next);
+  let missing = 0;
+  const base = context.globalAlpha;
+  for (const [stepLevel, weight] of [[level, 1 - fadeIn], [level + 1, fadeIn]] as const) {
+    if (weight <= 0) continue;
+    const scale = 2 ** stepLevel;
+    const size = (TILE_PX / scale) * view.scale;
+    const i0 = Math.floor(-view.x / size);
+    const j0 = Math.floor(-view.y / size);
+    const i1 = Math.floor((viewport.width - view.x) / size);
+    const j1 = Math.floor((viewport.height - view.y) / size);
+    context.globalAlpha = base * state.tuning.strokes.opacity * weight;
+    for (let j = j0; j <= j1; j++) {
+      for (let i = i0; i <= i1; i++) {
+        const id = `${stepLevel}:${i}:${j}`;
+        let tile = tiles.get(id);
+        if (!tile) {
+          if (performance.now() - started > TILE_BUDGET_MS) {
+            missing++;
+            continue;
+          }
+          tile = strokeTile(stepLevel, i, j);
+          if (tiles.size >= MAX_TILES) tiles.delete(tiles.keys().next().value!);
+          tiles.set(id, tile);
+        }
+        // A little overlap hides hairline seams between scaled tiles.
+        context.drawImage(tile, view.x + i * size, view.y + j * size, size + 0.5, size + 0.5);
+      }
+    }
+  }
+  context.globalAlpha = base;
+  if (missing > 0) requestPaint();
+  return ` · strokes: step 2^${level}${fadeIn > 0 ? ` → 2^${level + 1} (${Math.round(fadeIn * 100)}%)` : ''}${missing ? ` · painting ${missing} tiles…` : ''}`;
 }
 
 function resize(): void {
@@ -244,9 +367,15 @@ animateButton.addEventListener('click', () => {
 // ── Settings ────────────────────────────────────────────────────────────────
 
 const checkboxes: [string, keyof Show][] = [
+  ['#show-palette', 'palette'],
+  ['#show-glaze', 'glaze'],
+  ['#show-depth', 'depth'],
+  ['#show-flow', 'flow'],
+  ['#show-load', 'load'],
   ['#show-fill', 'fill'],
   ['#show-edge', 'edge'],
   ['#show-wash', 'wash'],
+  ['#show-strokes', 'strokes'],
   ['#show-grain', 'grain'],
   ['#show-lines', 'lines'],
   ['#anchor-lines', 'anchorLines'],
@@ -344,10 +473,72 @@ function layerControls(key: 'wash' | 'grain', title: string, hint: string, maxCe
   ]);
 }
 
+function strokeControls(): HTMLElement {
+  const s = () => state.tuning.strokes;
+  const check = (label: string, get: () => boolean, set: (v: boolean) => void) => {
+    const row = document.createElement('label');
+    row.className = 'color-row';
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.checked = get();
+    box.addEventListener('change', () => {
+      set(box.checked);
+      changed();
+    });
+    row.append(box, document.createTextNode(label));
+    return row;
+  };
+  return fieldset('Brush strokes', 'Strokes inside each area: they start and end inside it and never cross an edge. Sizes are screen pixels at a zoom step; tiles are repainted when you change them.', [
+    slider({ label: 'Opacity', min: 0, max: 1, step: 0.01, get: () => s().opacity, set: (v) => (s().opacity = v) }),
+    slider({ label: 'Row spacing (px)', min: 4, max: 120, step: 1, get: () => s().spacing, set: (v) => (s().spacing = v) }),
+    slider({ label: 'Brush width (px)', min: 2, max: 120, step: 1, get: () => s().width, set: (v) => (s().width = v) }),
+    slider({ label: 'Stroke length (px)', min: 10, max: 600, step: 5, get: () => s().length, set: (v) => (s().length = v) }),
+    slider({ label: 'Overlap in a row (share)', min: 0, max: 0.8, step: 0.01, get: () => s().overlap, set: (v) => (s().overlap = v) }),
+    slider({ label: 'Angle (degrees)', min: -90, max: 90, step: 1, get: () => s().angle, set: (v) => (s().angle = v) }),
+    slider({ label: 'Angle jitter (degrees)', min: 0, max: 45, step: 1, get: () => s().angleJitter, set: (v) => (s().angleJitter = v) }),
+    slider({ label: 'Bend (share of length)', min: 0, max: 0.4, step: 0.01, get: () => s().bend, set: (v) => (s().bend = v) }),
+    slider({ label: 'Stop before the edge (px)', min: 0, max: 60, step: 1, get: () => s().inset, set: (v) => (s().inset = v) }),
+    check('Strokes along the edge', () => s().contour, (v) => (s().contour = v)),
+    slider({ label: 'Edge strokes: inside the edge (px)', min: 0, max: 60, step: 1, get: () => s().contourInset, set: (v) => (s().contourInset = v) }),
+    slider({ label: 'Edge strokes: length (px)', min: 10, max: 600, step: 5, get: () => s().contourLength, set: (v) => (s().contourLength = v) }),
+    slider({ label: 'Dries after (share of length)', min: 0.1, max: 3, step: 0.05, get: () => s().dryness, set: (v) => (s().dryness = v) }),
+    slider({ label: 'Follow edges: strength', min: 0, max: 1, step: 0.01, get: () => s().flow, set: (v) => (s().flow = v) }),
+    slider({ label: 'Follow edges: within (px)', min: 5, max: 300, step: 5, get: () => s().flowDistance, set: (v) => (s().flowDistance = v) }),
+    slider({ label: 'Paint load: colour change', min: 0, max: 1, step: 0.01, get: () => s().load, set: (v) => (s().load = v) }),
+    slider({ label: 'Paint load: strokes per dip', min: 2, max: 10, step: 1, get: () => s().loadCycle, set: (v) => (s().loadCycle = v) }),
+    slider({ label: 'Colour variation', min: 0, max: 0.6, step: 0.01, get: () => s().shade, set: (v) => (s().shade = v) }),
+    slider({ label: 'Lighter strokes (share)', min: 0, max: 1, step: 0.01, get: () => s().light, set: (v) => (s().light = v) }),
+    colorRow('Darker towards', () => s().ink, (rgb) => (s().ink = rgb)),
+    colorRow('Lighter towards', () => s().paper, (rgb) => (s().paper = rgb)),
+    check('Flat brush (off: round)', () => s().brush === 'flat', (v) => (s().brush = v ? 'flat' : 'round')),
+    slider({ label: 'Seed', min: 0, max: 999, step: 1, get: () => s().seed % 1000, set: (v) => (s().seed = v) }),
+  ]);
+}
+
+function gradientControls(title: string, hint: string, key: 'shallow' | 'landRim'): HTMLElement {
+  const g = () => state.tuning[key];
+  return fieldset(title, hint, [
+    slider({ label: 'Width (map units)', min: 0, max: 150, step: 1, get: () => g().width, set: (v) => (g().width = v) }),
+    slider({ label: 'Strength at the edge', min: 0, max: 1, step: 0.01, get: () => g().amount, set: (v) => (g().amount = v) }),
+    slider({ label: 'Falloff', min: 0.3, max: 6, step: 0.1, get: () => g().falloff, set: (v) => (g().falloff = v) }),
+  ]);
+}
+
 function buildSettings(): void {
   const { tuning } = state;
   settingsRoot.replaceChildren(
+    fieldset('Pigment and paper (step 1)', 'Screen colours become paint from one box: less saturated, lighter, sharing an undertone, laid as a glaze over warm paper.', [
+      slider({ label: 'Mute saturation', min: 0, max: 1, step: 0.01, get: () => tuning.pigment.mute, set: (v) => (tuning.pigment.mute = v) }),
+      slider({ label: 'Lighten (water in the paint)', min: 0, max: 0.6, step: 0.01, get: () => tuning.pigment.lighten, set: (v) => (tuning.pigment.lighten = v) }),
+      slider({ label: 'Towards the undertone', min: 0, max: 0.6, step: 0.01, get: () => tuning.pigment.undertoneAmount, set: (v) => (tuning.pigment.undertoneAmount = v) }),
+      colorRow('Undertone', () => tuning.pigment.undertone, (rgb) => (tuning.pigment.undertone = rgb)),
+      colorRow('Paper', () => tuning.paper, (rgb) => (tuning.paper = rgb)),
+      slider({ label: 'Glaze opacity', min: 0.3, max: 1, step: 0.01, get: () => tuning.glaze, set: (v) => (tuning.glaze = v) }),
+    ]),
+    gradientControls('Shallow water (step 2)', 'Water is lighter near its shore. In map units, so it zooms with the map.', 'shallow'),
+    gradientControls('Land rim (step 2)', 'Land is a little darker near its edge and lighter inside.', 'landRim'),
     layerControls('wash', 'Blotches', 'What is on the map: uneven paint in many sizes, anchored to the map. Finer ones fade in as you zoom in.', 64),
+    strokeControls(),
     layerControls('grain', 'Grain', 'What it is painted on: about the same size on screen at every zoom, cross-faded between zoom steps.', 512),
     fieldset('Edge', 'Paint pooled along the inside of each area: darkest at the edge, fading inward. In screen pixels.', [
       slider({ label: 'Width (px)', min: 0, max: 60, step: 0.5, get: () => tuning.edge.width, set: (v) => (tuning.edge.width = v) }),
@@ -405,13 +596,19 @@ function load(): Saved | null {
       ...saved.tuning,
       wash: { ...tuning.wash, ...saved.tuning?.wash },
       grain: { ...tuning.grain, ...saved.tuning?.grain },
+      // Strokes saved before they were painted per area used other units; those are dropped.
+      strokes: { ...tuning.strokes, ...(saved.tuning?.strokes && 'spacing' in saved.tuning.strokes ? saved.tuning.strokes : {}) },
       edge: { ...tuning.edge, ...saved.tuning?.edge },
+      pigment: { ...tuning.pigment, ...saved.tuning?.pigment },
+      shallow: { ...tuning.shallow, ...saved.tuning?.shallow },
+      landRim: { ...tuning.landRim, ...saved.tuning?.landRim },
     };
     // Settings saved before the edge became a gradient had two bands instead.
     delete (merged as { edges?: unknown }).edges;
     return {
       tuning: merged,
-      show: { ...defaultShow, ...saved.show },
+      // Settings saved before step 1 had blotches and grain on; they start off now, as step 1 drops them.
+      show: { ...defaultShow, ...saved.show, ...(saved.show && !('palette' in saved.show) ? { wash: false, grain: false } : {}) },
     };
   } catch {
     return null;

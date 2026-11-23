@@ -258,9 +258,92 @@ export interface WashEdge {
   steps: number;
 }
 
+/**
+ * Brush strokes inside each area (`paintWashStrokes`): rows of strokes that
+ * start and end inside the area, and strokes along its edge. Lengths are in
+ * canvas pixels at the scale the strokes are painted at.
+ */
+export interface WashStrokes {
+  /** Seed of the strokes. */
+  seed: number;
+  /** Distance between rows of strokes, in pixels. Less than `width` makes rows overlap. */
+  spacing: number;
+  /** Typical stroke length, in pixels. */
+  length: number;
+  /** Brush width, in pixels. Each stroke varies by ±15 %. */
+  width: number;
+  /** How much neighbouring strokes in a row overlap, as a share of `length`. */
+  overlap: number;
+  /** Direction of the rows, in degrees from the x axis, clockwise on screen. */
+  angle: number;
+  /** How far a stroke may turn from `angle`, in degrees. */
+  angleJitter: number;
+  /** How far a stroke may curve sideways, as a share of its length. */
+  bend: number;
+  /** How far inside the edge the fill strokes start and end, in pixels. */
+  inset: number;
+  /** Strokes along the edge, before the fill: a painter's cutting in. */
+  contour: boolean;
+  /** How far inside the edge the edge strokes run, in pixels. */
+  contourInset: number;
+  /** Length of each edge stroke, in pixels. */
+  contourLength: number;
+  /** How far a stroke's colour may move from the area's towards `ink` or `paper`, from 0 to 1. */
+  shade: number;
+  /** Share of strokes that move towards `paper` (lighter) rather than `ink` (darker). */
+  light: number;
+  /** The darker colour, as RGB. */
+  ink: [r: number, g: number, b: number];
+  /** The lighter colour, as RGB. */
+  paper: [r: number, g: number, b: number];
+  /** Opacity of the strokes over the area's fill, for the caller that composites them. */
+  opacity: number;
+  /** The brush the strokes are painted with. */
+  brush: 'flat' | 'round';
+  /** How far a bristle paints before it runs dry, as a share of `length`. */
+  dryness: number;
+  /** How strongly strokes near the edge turn to run along it, from 0 to 1. */
+  flow: number;
+  /** How far from the edge strokes turn, in pixels. */
+  flowDistance: number;
+  /** How much the colour changes over a load of paint: the first stroke after a dip darker, the last lighter. 0 is off. */
+  load: number;
+  /** Strokes per load of paint, on average. */
+  loadCycle: number;
+}
+
+/**
+ * Turns a screen colour into one a painter could mix: less saturated,
+ * lighter, and pulled towards one undertone that all colours share.
+ */
+export interface WashPigment {
+  /** How much saturation is taken out, from 0 to 1. */
+  mute: number;
+  /** How much lighter, from 0 to 1, as watercolour is thinned with water. */
+  lighten: number;
+  /** The undertone every colour is pulled towards, as RGB. */
+  undertone: [r: number, g: number, b: number];
+  /** How far towards the undertone, from 0 to 1. */
+  undertoneAmount: number;
+}
+
+/** A soft band of colour along an area's edge, in line units: the map's own geography, so it zooms with the map. */
+export interface WashGradient {
+  /** How far inward the band reaches, in line units. */
+  width: number;
+  /** How far the colour moves at the edge, from 0 to 1. */
+  amount: number;
+  /** The shape of the fade, as in `WashEdge`. */
+  falloff: number;
+  /** Strokes the gradient is built from. */
+  steps: number;
+}
+
 export interface WashTuning {
   /** Blotches and missed spots: what is on the map. Many octaves, from small to large. */
   wash: WashLayer;
+  /** Brush strokes inside each area, painted by `paintWashStrokes`. */
+  strokes: WashStrokes;
   /** Paper grain: what it is painted on. About two octaves, so it stays the same size on the canvas. */
   grain: WashLayer;
   /** Pooled paint along the inside of the edge. */
@@ -269,6 +352,16 @@ export interface WashTuning {
   edgeColor: [r: number, g: number, b: number];
   /** Side of a noise tile in pixels. */
   tileSize: number;
+  /** The paper under the paint, as RGB. */
+  paper: [r: number, g: number, b: number];
+  /** How a colour becomes a pigment, for `pigment`. */
+  pigment: WashPigment;
+  /** Opacity of a fill laid as a glaze over the paper (`glaze: true`). */
+  glaze: number;
+  /** Water is lighter near its shore, where it is shallow. Towards `paper`. */
+  shallow: WashGradient;
+  /** Land is darker near its edge and lighter inside it. Towards `edgeColor`. */
+  landRim: WashGradient;
 }
 
 export const defaultWashTuning: WashTuning = {
@@ -294,7 +387,37 @@ export const defaultWashTuning: WashTuning = {
     missed: 1,
     missedRim: 0.3,
   },
+  strokes: {
+    seed: 0x57e0,
+    spacing: 22,
+    length: 120,
+    width: 30,
+    overlap: 0.3,
+    angle: -30,
+    angleJitter: 6,
+    bend: 0.06,
+    inset: 5,
+    contour: true,
+    contourInset: 9,
+    contourLength: 110,
+    shade: 0.14,
+    light: 0.4,
+    ink: [40, 36, 30],
+    paper: [255, 252, 240],
+    opacity: 0.7,
+    brush: 'flat',
+    dryness: 1.2,
+    flow: 0.85,
+    flowDistance: 70,
+    load: 0.3,
+    loadCycle: 4,
+  },
   edge: { width: 12, alpha: 0.2, falloff: 2.5, steps: 10 },
   edgeColor: [40, 28, 16],
   tileSize: 512,
+  paper: [244, 236, 218],
+  pigment: { mute: 0.35, lighten: 0.12, undertone: [120, 96, 60], undertoneAmount: 0.16 },
+  glaze: 0.9,
+  shallow: { width: 30, amount: 0.35, falloff: 1.6, steps: 12 },
+  landRim: { width: 40, amount: 0.12, falloff: 1.2, steps: 10 },
 };

@@ -119,7 +119,7 @@ paintLines(context, [river, road], { size: 8, transform: { scale: 2 } }); // oth
 
 ## Filled areas as a wash
 
-*Since 0.4.0.* `paintWash(context, rings, color, options)` paints a filled area as a watercolour wash: the fill, paint pooled along the inside of its edge, and a texture of blotches, spots the brush missed and paper grain. `rings` are lists of points in line coordinates; inner rings are holes (even-odd).
+*Since 0.4.0.* `paintWash(context, rings, color, options)` paints a filled area as a watercolour wash: the fill, paint pooled along the inside of its edge, and a texture of blotches, spots the brush missed, brush strokes and paper grain. `rings` are lists of points in line coordinates; inner rings are holes (even-odd).
 
 ```ts
 import { paintWash, paintWashTexture } from 'brushstroke';
@@ -142,6 +142,31 @@ context.restore();
 - The edge is in canvas pixels.
 - It needs a canvas to make its noise tiles: `OffscreenCanvas`, or `document` in a browser. The tiles are made once and kept.
 - `demo/wash.html` (`npm run dev`) shows a small map to pan and zoom, with sliders for every setting and a button that copies them.
+
+### Brush strokes inside each area
+
+*Since 0.4.0.* `paintWashStrokes(context, rings, color, options)` paints brush strokes inside one area: strokes along its edge, then rows of strokes that start and end inside it, each a shade of `color`. No stroke crosses the edge.
+
+```ts
+import { paintWashStrokes } from 'brushstroke';
+
+// Into a tile of a zoom step, kept and drawn scaled until the next step.
+paintWashStrokes(tileContext, area.rings, area.color, { transform: { scale: step, x: -tileX, y: -tileY }, seed: area.id });
+```
+
+- The strokes lie on a grid fixed to the line coordinates. When an area changes, only the strokes at the changed edge change.
+- Their sizes in `WashTuning.strokes` are canvas pixels at `transform.scale`. To keep them still while a view zooms, paint them into tiles at zoom steps (powers of two) and scale the tiles between steps, as `demo/wash.html` does. Painting strokes every frame is too slow.
+- `strokes.opacity` is applied by the caller when it draws the tiles. `paintLines` sets each bristle's opacity itself.
+- The geometry is public: `hatchArea` and `contourStrokes` give the strokes as lines, and `washStrokeLines` gives them with their colours and widths.
+- `strokes.flow` turns strokes near the edge to run along it (within `strokes.flowDistance` pixels); turned strokes are shortened until both ends are inside. `strokes.load` paints each row in cycles of about `strokes.loadCycle` strokes, darker just after a dip and lighter towards the end.
+
+### Pigments, glaze and depth
+
+*Since 0.4.0.* Three helpers make colours and values read as paint rather than screen colour:
+
+- `pigment(color, tuning.pigment)` turns any colour into one a painter could mix: less saturated, lighter, and pulled towards one shared undertone, so colours picked on a screen sit together.
+- `paintWash(…, { glaze: true })` lays the fill as a transparent glaze (multiplied) over what is under it. Paint paper (`tuning.paper`) under the map first, and the paper shows through every colour.
+- `paintEdgeGradient(context, rings, edges, color, gradient, { transform })` paints a soft band of `color` along `edges`, inside the area, `gradient.width` line units wide: lighter shallows along a shore (`tuning.shallow`, towards the paper) or a darker rim on land (`tuning.landRim`). It is in line units, so it zooms with the map. `edges` names the rings that are real shores, so the map's own border gets no band.
 
 ## Parsing without painting
 

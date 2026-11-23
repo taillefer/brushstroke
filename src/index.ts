@@ -15,7 +15,10 @@ export {
   type TuningFieldRange,
   type WashColor,
   type WashEdge,
+  type WashGradient,
   type WashLayer,
+  type WashPigment,
+  type WashStrokes,
   type WashTuning,
 } from './tuning';
 export {
@@ -25,6 +28,12 @@ export {
   octaveOffset,
   paintWash,
   paintWashTexture,
+  paintEdgeGradient,
+  paintWashStrokes,
+  pigment,
+  type PaintGradientOptions,
+  washStrokeLines,
+  type PaintWashStrokesOptions,
   tilePixels,
   visibleOctaves,
   type EdgeStep,
@@ -39,6 +48,7 @@ export { strokesToLines, type StrokeLine, type StrokesToLinesOptions } from './s
 export { flattenSubpath } from './geometry/flattenSubpath';
 export { simplify } from './geometry/simplify';
 export { strokeOutline, type StrokeOutlineOptions } from './geometry/outline';
+export { contourStrokes, hatchArea, insideRings, type ContourOptions, type HatchLine, type HatchOptions } from './geometry/hatch';
 export { smoothLine, straightLine, type SmoothLineOptions } from './geometry/smoothLine';
 export { dashLine, type DashLineOptions } from './geometry/dash';
 export { doubleLine, offsetLine, type OffsetLineOptions } from './geometry/offset';

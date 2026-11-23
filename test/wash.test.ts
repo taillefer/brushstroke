@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { defaultWashTuning } from '../src/tuning';
-import { edgeSteps, noiseTile, octaveMatrix, octaveOffset, tilePixels, visibleOctaves } from '../src/wash';
+import { edgeSteps, noiseTile, octaveMatrix, octaveOffset, pigment, tilePixels, visibleOctaves } from '../src/wash';
 
 const TILE = 128;
 
@@ -172,5 +172,29 @@ describe('edgeSteps', () => {
   it('paints nothing with no width or no opacity', () => {
     expect(edgeSteps({ ...edge, width: 0 })).toEqual([]);
     expect(edgeSteps({ ...edge, alpha: 0 })).toEqual([]);
+  });
+});
+
+
+describe('pigment', () => {
+  const sat = (hex: string) => {
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+    return Math.max(r!, g!, b!) - Math.min(r!, g!, b!);
+  };
+
+  it('mutes, lightens and pulls colours towards one undertone', () => {
+    const settings = defaultWashTuning.pigment;
+    for (const color of ['#2f7fd1', '#5cbf4a', '#ff0000']) {
+      const p = pigment(color, settings);
+      expect(p).toMatch(/^#[0-9a-f]{6}$/);
+      expect(sat(p)).toBeLessThan(sat(color));
+    }
+    // Two very different colours end up closer together.
+    const gap = (a: string, b: string) => [1, 3, 5].reduce((sum, i) => sum + Math.abs(parseInt(a.slice(i, i + 2), 16) - parseInt(b.slice(i, i + 2), 16)), 0);
+    expect(gap(pigment('#2f7fd1', settings), pigment('#5cbf4a', settings))).toBeLessThan(gap('#2f7fd1', '#5cbf4a'));
+  });
+
+  it('leaves a colour as it is with every setting at 0', () => {
+    expect(pigment('#2f7fd1', { mute: 0, lighten: 0, undertone: [0, 0, 0], undertoneAmount: 0 })).toBe('#2f7fd1');
   });
 });
