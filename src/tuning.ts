@@ -207,3 +207,94 @@ export const tuningRanges: Record<keyof Tuning, TuningFieldRange> = {
 export function resolveTuning(overrides: Partial<Tuning> = {}): Tuning {
   return { ...defaultTuning, ...overrides };
 }
+
+// ── Wash ─────────────────────────────────────────────────────────────────────
+// The look of `paintWash`: a filled area painted as a watercolour wash. Chosen
+// on demo/wash.html, like `defaultTuning` on demo/tune.html.
+
+/** An RGB colour and its strongest opacity, from 0 to 1. */
+export type WashColor = [r: number, g: number, b: number, alpha: number];
+
+/**
+ * A band of noise octaves. Each octave is a tile of noise that covers 2^k
+ * units of the line coordinates, so it stays in place when the view zooms.
+ */
+export interface WashLayer {
+  /** Noise blobs across a tile. More blobs repeat less often but cost more to make. */
+  cells: number;
+  /** Seed of the layer's tiles. */
+  seed: number;
+  /** How many different tiles the octaves take turns with. */
+  tiles: number;
+  /** An octave fades in, over one octave, as its tile grows past this size on the canvas, in pixels... */
+  fromPx: number;
+  /** ...and fades out, over one octave, as it grows to this size. A whole number of octaves above `fromPx` keeps the strength even. */
+  toPx: number;
+  /** Where the noise is above 0, this colour darkens the paint. */
+  ink: WashColor;
+  /** Where the noise is below 0, this colour lightens it: bare paper. */
+  paper: WashColor;
+  /** Noise below this shows the paper strongly: a spot the brush missed. 1 turns them off. */
+  missed: number;
+  /** How far above `missed` a missed spot starts to show, in noise units: its soft rim. */
+  missedRim: number;
+}
+
+/**
+ * Paint pooled along the inside of an area's edge: darkest at the edge and
+ * fading inward, as wet paint dries towards its rim.
+ */
+export interface WashEdge {
+  /** How far inward the darkening reaches, in canvas pixels. */
+  width: number;
+  /** Its opacity right at the edge. */
+  alpha: number;
+  /**
+   * The shape of the fade: opacity × (1 − distance / width) ^ falloff. 1 fades
+   * evenly; higher values keep a thin dark rim with a soft tail.
+   */
+  falloff: number;
+  /** Strokes the gradient is built from. More are smoother and cost more per area. */
+  steps: number;
+}
+
+export interface WashTuning {
+  /** Blotches and missed spots: what is on the map. Many octaves, from small to large. */
+  wash: WashLayer;
+  /** Paper grain: what it is painted on. About two octaves, so it stays the same size on the canvas. */
+  grain: WashLayer;
+  /** Pooled paint along the inside of the edge. */
+  edge: WashEdge;
+  /** Colour of the pooled paint, as RGB. */
+  edgeColor: [r: number, g: number, b: number];
+  /** Side of a noise tile in pixels. */
+  tileSize: number;
+}
+
+export const defaultWashTuning: WashTuning = {
+  wash: {
+    cells: 24,
+    seed: 0x5eed1,
+    tiles: 3,
+    fromPx: 384,
+    toPx: 12288,
+    ink: [70, 48, 24, 0.13],
+    paper: [255, 248, 228, 0.1],
+    missed: -0.7,
+    missedRim: 0.3,
+  },
+  grain: {
+    cells: 256,
+    seed: 0x6a41,
+    tiles: 2,
+    fromPx: 512,
+    toPx: 2048,
+    ink: [60, 40, 20, 0.12],
+    paper: [255, 250, 235, 0.1],
+    missed: 1,
+    missedRim: 0.3,
+  },
+  edge: { width: 12, alpha: 0.2, falloff: 2.5, steps: 10 },
+  edgeColor: [40, 28, 16],
+  tileSize: 512,
+};

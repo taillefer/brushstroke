@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>brushstroke wash</title>
+    <link rel="stylesheet" href="./demo.css" />
+    <link rel="stylesheet" href="./tune.css" />
+    <link rel="stylesheet" href="./wash.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Wash</h1>
+      <p>
+        Filled areas painted as a watercolour wash, textured in octaves anchored to the map. Drag to pan, scroll to
+        zoom, and watch that nothing slides. Copy the settings into <code>defaultWashTuning</code> in
+        <code>src/tuning.ts</code>. <a href="./index.html">← Demo page</a> · <a href="./tune.html">Brush tuning</a>
+      </p>
+      <div class="toolbar">
+        <label>Zoom <input id="zoom" type="range" min="-2" max="8" step="0.01" /> <output id="zoom-value"></output></label>
+        <button id="animate" type="button">Animate zoom</button>
+        <button id="fit" type="button">Fit</button>
+        <label><input id="anchor-screen" type="checkbox" /> Anchor texture to the screen (the wrong way, to compare)</label>
+      </div>
+      <div class="toolbar">
+        <label><input id="show-fill" type="checkbox" /> Fill</label>
+        <label><input id="show-edge" type="checkbox" /> Edge</label>
+        <label><input id="show-wash" type="checkbox" /> Blotches</label>
+        <label><input id="show-grain" type="checkbox" /> Grain</label>
+        <label><input id="show-lines" type="checkbox" /> Coast lines</label>
+        <label><input id="anchor-lines" type="checkbox" /> Anchor lines (<code>anchorScale</code>)</label>
+      </div>
+    </header>
+
+    <main class="wash-layout">
+      <section class="stage">
+        <canvas id="map"></canvas>
+        <p id="octaves" class="octaves"></p>
+      </section>
+      <aside class="controls">
+        <div class="buttons">
+          <button id="copy" type="button">Copy settings</button>
+          <button id="reset" type="button">Reset to defaults</button>
+        </div>
+        <div id="settings"></div>
+        <textarea id="output" rows="10" readonly></textarea>
+      </aside>
+    </main>
+
+    <script type="module" src="./wash.ts"></script>
+  </body>
+</html>

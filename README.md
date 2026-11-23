@@ -117,6 +117,32 @@ paintLines(context, [river, road], { size: 8, transform: { scale: 2 } }); // oth
 - A line of width 0 paints nothing. A negative width, `NaN` or `Infinity` throws a `RangeError`.
 - The bristles spread with the width. With `lodBristleSpacing` or `lodSingleStroke` on, a narrow line gets fewer bristles or a single stroke, measured by its own width (its widest, for a line that changes width).
 
+## Filled areas as a wash
+
+*Since 0.4.0.* `paintWash(context, rings, color, options)` paints a filled area as a watercolour wash: the fill, paint pooled along the inside of its edge, and a texture of blotches, spots the brush missed and paper grain. `rings` are lists of points in line coordinates; inner rings are holes (even-odd).
+
+```ts
+import { paintWash, paintWashTexture } from 'brushstroke';
+
+paintWash(context, [island], '#5cbf4a', { transform: { scale: zoom, x, y }, seed: 7 });
+
+// Many areas: fill and edge each one, then texture them all at once.
+for (const area of areas) paintWash(context, area.rings, area.color, { transform, layers: { wash: false, grain: false } });
+context.save();
+context.beginPath();
+context.rect(mapX, mapY, mapWidth, mapHeight);
+context.clip();
+paintWashTexture(context, { transform, seed: 7 });
+context.restore();
+```
+
+- The texture is laid out in the line coordinates, in octaves of 2^k units, so it stays in place while `transform` pans and zooms. Each octave shows while its tile is between `fromPx` and `toPx` on the canvas and fades in and out over one octave, so zooming in brings finer blotches in without moving the coarser ones.
+- The blotches (`wash`) cover many octaves. The paper grain (`grain`) covers two, so it stays about the same size on the canvas and cross-fades between zoom steps.
+- The look is `WashTuning`, with defaults in `defaultWashTuning`. Pass changes as `tuning`. `layers` turns the fill, edge, blotches and grain on or off.
+- The edge is in canvas pixels.
+- It needs a canvas to make its noise tiles: `OffscreenCanvas`, or `document` in a browser. The tiles are made once and kept.
+- `demo/wash.html` (`npm run dev`) shows a small map to pan and zoom, with sliders for every setting and a button that copies them.
+
 ## Parsing without painting
 
 `parseSvg(text)` turns SVG text into lines without painting them. Use it to parse once and keep the geometry, for example to store it in your own format. It needs no DOM, so it also runs in Node and in web workers (*since 0.3.0*; before that it needed a `DOMParser`).

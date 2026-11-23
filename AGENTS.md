@@ -43,6 +43,8 @@ Level of detail is opt-in through three `Tuning` fields that are off at 0: `lodB
 
 Scaling is applied to the geometry before step 2, never to the canvas, so every look number stays in output pixels. The one exception is `anchorScale` (`docs/adr/0002-anchor-noise-to-a-scale.md`): when set, the noise along lines (pressure, wobble bends, dry gaps) and the paper grain are sampled at line coordinates × `anchorScale` instead of plan pixels, through a ratio `anchorScale / scale` that `planStrokes` hands to the noise functions and, as `BrushOptions.noiseRatio`, to the brush. With it unset the ratio is 1 and every expression is the one it was, so the call-log fixtures stay valid. A line's `width` and `widthEnd` follow the same rule as `size`: output pixels, not scaled. Lines without them must plan exactly as before (the call-log fixtures check this). An offset is applied only when drawing, so it moves finished strokes without changing them. The paper grain belongs to the whole painting, not to one stroke, so it stays in place across strokes.
 
+Filled areas go through a separate path, `src/wash.ts` (`docs/adr/0003-wash-texture-in-octaves.md`): `paintWash` fills an area, darkens the inside of its edge and lays tileable noise over it as canvas patterns, one per octave of 2^k line units, weighted by the octave's size on the canvas (`visibleOctaves`). Its look is `WashTuning` in `src/tuning.ts`, chosen on `demo/wash.html`. The pure parts are tested in Node; the tiles need `OffscreenCanvas` or a DOM.
+
 Two rules hold across the code:
 
 - All randomness comes from `src/random.ts`, seeded. Never use `Math.random`.
@@ -55,7 +57,7 @@ Two rules hold across the code:
 | `src/index.ts` | Public exports |
 | `src/` | Library code, one folder or file per pipeline step (see above) |
 | `test/` | Vitest unit tests, `*.test.ts` |
-| `demo/` | `index.html` (demo page) and `tune.html` (tuning page), served by `npm run dev` |
+| `demo/` | `index.html` (demo page), `tune.html` (brush tuning) and `wash.html` (fills), served by `npm run dev` |
 
 ## Commands
 

@@ -1,0 +1,78 @@
+.wash-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 16px;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+@media (max-width: 900px) {
+  .wash-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.stage canvas {
+  display: block;
+  width: 100%;
+  height: min(72vh, 760px);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  cursor: grab;
+  touch-action: none;
+}
+
+.stage canvas:active {
+  cursor: grabbing;
+}
+
+.octaves {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.controls {
+  max-height: calc(72vh + 120px);
+  overflow-y: auto;
+  font-size: 12px;
+}
+
+.controls fieldset {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.controls legend {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.controls .hint {
+  margin: 0 0 6px;
+  color: var(--muted);
+}
+
+.color-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+}
+
+.controls textarea {
+  width: 100%;
+  font: 11px/1.4 ui-monospace, monospace;
+}

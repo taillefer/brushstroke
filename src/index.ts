@@ -7,7 +7,30 @@ export { parseSvg } from './parse/svg';
 export { parseSvgDrawing } from './parse/drawing';
 export type { BrushKind } from './brush/brush';
 export type { Hand } from './hand';
-export { defaultTuning, tuningRanges, type Tuning, type TuningFieldRange } from './tuning';
+export {
+  defaultTuning,
+  defaultWashTuning,
+  tuningRanges,
+  type Tuning,
+  type TuningFieldRange,
+  type WashColor,
+  type WashEdge,
+  type WashLayer,
+  type WashTuning,
+} from './tuning';
+export {
+  edgeSteps,
+  noiseTile,
+  octaveMatrix,
+  octaveOffset,
+  paintWash,
+  paintWashTexture,
+  tilePixels,
+  visibleOctaves,
+  type EdgeStep,
+  type Octave,
+  type PaintWashOptions,
+} from './wash';
 export type { ParsedSvg, ParsedSvgDrawing, Point, Segment, Subpath, SvgFill, SvgLine, SvgShape, SvgStroke } from './types';
 export { parseSvgText, parseSvgTree, type SvgNode } from './parse/svg';
 export { parseSvgDrawingTree } from './parse/drawing';
