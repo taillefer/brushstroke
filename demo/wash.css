@@ -76,3 +76,61 @@
   width: 100%;
   font: 11px/1.4 ui-monospace, monospace;
 }
+
+/* The defaults column: each control's default, pressed to use it. */
+.controls .slider {
+  grid-template-columns: 1fr 44px 52px;
+  column-gap: 6px;
+}
+
+button.default {
+  padding: 0 4px;
+  border: 1px dashed var(--line);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+button.default.swatch {
+  width: 22px;
+  height: 18px;
+  margin-left: auto;
+}
+
+.color-row button.default:not(.swatch) {
+  margin-left: auto;
+}
+
+/* A field that differs from its default. */
+.differs > span,
+.differs {
+  font-weight: 600;
+}
+
+.differs button.default {
+  border-style: solid;
+  border-color: #b5651d;
+  color: #b5651d;
+}
+
+.toolbar label.differs::after {
+  content: ' *';
+  color: #b5651d;
+}
+
+.toolbar .hint {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* While the defaults are shown, the custom controls are dimmed: they still edit the custom settings. */
+body.viewing-defaults .controls #settings {
+  opacity: 0.45;
+}
+
+body.viewing-defaults .stage canvas {
+  outline: 3px solid #b5651d;
+  outline-offset: -3px;
+}

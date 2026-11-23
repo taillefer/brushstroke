@@ -50,12 +50,13 @@ const areaList: { rings: Point[][]; color: string; seed: string; water: boolean;
 const areas = areaList.map((area) => ({ ...area, edges: area.rings.filter((ring) => ring !== frame) }));
 
 /** The colour an area is painted in: its own, or as a pigment. */
-const areaColor = (area: { color: string }) => (state.show.palette ? pigment(area.color, state.tuning.pigment) : area.color);
+const areaColor = (area: { color: string }) => (activeShow().palette ? pigment(area.color, activeTuning().pigment) : area.color);
 const rgbHex = (c: readonly number[]) => `#${c.slice(0, 3).map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')}`;
 
 /** The stroke settings with the step-2 parts that are switched off set to nothing. */
 function strokeTuning(): WashTuning {
-  const { tuning, show } = state;
+  const tuning = activeTuning();
+  const show = activeShow();
   return { ...tuning, strokes: { ...tuning.strokes, flow: show.flow ? tuning.strokes.flow : 0, load: show.load ? tuning.strokes.load : 0 } };
 }
 /** Each area's box, to skip it on tiles it does not reach. */
@@ -103,6 +104,12 @@ const copyTuning = (t: WashTuning): WashTuning => JSON.parse(JSON.stringify(t)) 
 const defaultShow: Show = { palette: true, glaze: true, depth: true, flow: true, load: true, fill: true, edge: true, wash: false, strokes: true, grain: false, lines: true, anchorLines: true, anchorScreen: false };
 const state: Saved = load() ?? { tuning: copyTuning(defaultWashTuning), show: { ...defaultShow } };
 
+// The page can show the defaults instead of the custom settings, to compare. The custom settings are kept as they are.
+const defaults: WashTuning = copyTuning(defaultWashTuning);
+let viewing: 'custom' | 'defaults' = 'custom';
+const activeTuning = (): WashTuning => (viewing === 'defaults' ? defaults : state.tuning);
+const activeShow = (): Show => (viewing === 'defaults' ? defaultShow : state.show);
+
 const canvas = document.querySelector<HTMLCanvasElement>('#map')!;
 const context = canvas.getContext('2d')!;
 const zoomInput = document.querySelector<HTMLInputElement>('#zoom')!;
@@ -133,7 +140,8 @@ function transform(): Required<LineTransform> {
 function paint(): void {
   const started = performance.now();
   const view = transform();
-  const { tuning, show } = state;
+  const tuning = activeTuning();
+  const show = activeShow();
   context.save();
   context.fillStyle = '#e9e2d2';
   context.fillRect(0, 0, viewport.width, viewport.height);
@@ -204,12 +212,12 @@ const TILE_PX = 512;
 /** Share of a zoom step over which the next step's tiles fade in. */
 const STEP_FADE = 0.35;
 /** Tiles kept; the oldest go first. */
-const MAX_TILES = 48;
+const MAX_TILES = 96;
 /** Time per frame spent painting new tiles, in ms. Tiles not painted yet come in the next frames. */
 const TILE_BUDGET_MS = 12;
 
+// Tiles are kept per settings, so switching between custom and defaults shows both at once.
 const tiles = new Map<string, HTMLCanvasElement>();
-let tilesFor = '';
 
 function strokeTile(level: number, i: number, j: number): HTMLCanvasElement {
   const ratio = Math.min(window.devicePixelRatio || 1, 1.5);
@@ -229,11 +237,7 @@ function strokeTile(level: number, i: number, j: number): HTMLCanvasElement {
 
 /** Draws the stroke tiles of the zoom steps that show, painting missing ones within the time budget. */
 function drawStrokeTiles(view: Required<LineTransform>, started: number): string {
-  const key = JSON.stringify([strokeTuning().strokes, state.show.palette && state.tuning.pigment]);
-  if (key !== tilesFor) {
-    tiles.clear();
-    tilesFor = key;
-  }
+  const key = JSON.stringify([strokeTuning().strokes, activeShow().palette && activeTuning().pigment]);
   const zoom = Math.log2(view.scale);
   const level = Math.floor(zoom);
   const t = zoom - level;
@@ -249,10 +253,10 @@ function drawStrokeTiles(view: Required<LineTransform>, started: number): string
     const j0 = Math.floor(-view.y / size);
     const i1 = Math.floor((viewport.width - view.x) / size);
     const j1 = Math.floor((viewport.height - view.y) / size);
-    context.globalAlpha = base * state.tuning.strokes.opacity * weight;
+    context.globalAlpha = base * activeTuning().strokes.opacity * weight;
     for (let j = j0; j <= j1; j++) {
       for (let i = i0; i <= i1; i++) {
-        const id = `${stepLevel}:${i}:${j}`;
+        const id = `${key}|${stepLevel}:${i}:${j}`;
         let tile = tiles.get(id);
         if (!tile) {
           if (performance.now() - started > TILE_BUDGET_MS) {
@@ -381,14 +385,77 @@ const checkboxes: [string, keyof Show][] = [
   ['#anchor-lines', 'anchorLines'],
   ['#anchor-screen', 'anchorScreen'],
 ];
+/** Shows each checkbox as the settings being viewed have it, and marks the ones that differ from the defaults. */
+function showCheckboxes(): void {
+  for (const [selector, key] of checkboxes) {
+    const box = document.querySelector<HTMLInputElement>(selector)!;
+    box.checked = activeShow()[key];
+    box.disabled = viewing === 'defaults';
+    const label = box.closest('label')!;
+    label.title = `Default: ${defaultShow[key] ? 'on' : 'off'}`;
+    label.classList.toggle('differs', viewing === 'custom' && state.show[key] !== defaultShow[key]);
+  }
+}
 for (const [selector, key] of checkboxes) {
   const box = document.querySelector<HTMLInputElement>(selector)!;
-  box.checked = state.show[key];
   box.addEventListener('change', () => {
     state.show[key] = box.checked;
     save();
+    showCheckboxes();
     requestPaint();
   });
+}
+showCheckboxes();
+document.querySelector('#checkboxes-default')!.addEventListener('click', () => {
+  if (viewing === 'defaults') return;
+  state.show = { ...defaultShow };
+  save();
+  showCheckboxes();
+  requestPaint();
+});
+
+function setViewing(next: 'custom' | 'defaults'): void {
+  viewing = next;
+  document.body.classList.toggle('viewing-defaults', next === 'defaults');
+  for (const radio of document.querySelectorAll<HTMLInputElement>('input[name="viewing"]')) radio.checked = radio.value === next;
+  showCheckboxes();
+  requestPaint();
+}
+for (const radio of document.querySelectorAll<HTMLInputElement>('input[name="viewing"]')) {
+  radio.addEventListener('change', () => setViewing(radio.value === 'defaults' ? 'defaults' : 'custom'));
+}
+window.addEventListener('keydown', (event) => {
+  // D switches between custom and defaults, unless the user is typing.
+  if (event.key !== 'd' && event.key !== 'D') return;
+  if (event.metaKey || event.ctrlKey || event.altKey) return;
+  const target = event.target as HTMLElement | null;
+  if (target && (target.tagName === 'TEXTAREA' || (target.tagName === 'INPUT' && (target as HTMLInputElement).type === 'text'))) return;
+  setViewing(viewing === 'custom' ? 'defaults' : 'custom');
+});
+
+/** Runs `read` against the defaults instead of the custom settings. */
+function atDefaults<T>(read: () => T): T {
+  const custom = state.tuning;
+  state.tuning = defaults;
+  try {
+    return read();
+  } finally {
+    state.tuning = custom;
+  }
+}
+
+/** A small button in the defaults column: shows the default, and sets the field to it when pressed. */
+function defaultButton(text: string, use: () => void): HTMLButtonElement {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'default';
+  button.textContent = text;
+  button.title = 'Default. Press to use it.';
+  button.addEventListener('click', (event) => {
+    event.preventDefault();
+    use();
+  });
+  return button;
 }
 
 interface Slider {
@@ -413,17 +480,26 @@ function slider(spec: Slider): HTMLElement {
   input.type = 'range';
   Object.assign(input, { min: String(spec.min), max: String(spec.max), step: String(spec.step) });
   const value = document.createElement('output');
+  const round = (v: number) => Math.round(v * 1000) / 1000;
+  const fallback = atDefaults(spec.get);
+  const reset = defaultButton(String(round(fallback)), () => {
+    spec.set(fallback);
+    show();
+    changed();
+  });
   const show = () => {
     input.value = String(spec.get());
-    value.value = String(Math.round(spec.get() * 1000) / 1000);
+    value.value = String(round(spec.get()));
+    const differs = round(spec.get()) !== round(fallback);
+    row.classList.toggle('differs', differs);
   };
   input.addEventListener('input', () => {
     spec.set(Number(input.value));
-    value.value = String(Math.round(Number(input.value) * 1000) / 1000);
+    show();
     changed();
   });
   show();
-  row.append(name, input, value);
+  row.append(name, input, value, reset);
   return row;
 }
 
@@ -436,11 +512,23 @@ function colorRow(label: string, get: () => WashColor | [number, number, number]
   const input = document.createElement('input');
   input.type = 'color';
   input.value = toHex(get());
+  const fallback = toHex(atDefaults(get));
+  const mark = () => row.classList.toggle('differs', input.value !== fallback);
   input.addEventListener('input', () => {
     set(fromHex(input.value));
+    mark();
     changed();
   });
-  row.append(input, document.createTextNode(label));
+  const reset = defaultButton('', () => {
+    input.value = fallback;
+    set(fromHex(fallback));
+    mark();
+    changed();
+  });
+  reset.style.background = fallback;
+  reset.classList.add('swatch');
+  mark();
+  row.append(input, document.createTextNode(label), reset);
   return row;
 }
 
@@ -481,11 +569,21 @@ function strokeControls(): HTMLElement {
     const box = document.createElement('input');
     box.type = 'checkbox';
     box.checked = get();
+    const fallback = atDefaults(get);
+    const mark = () => row.classList.toggle('differs', box.checked !== fallback);
     box.addEventListener('change', () => {
       set(box.checked);
+      mark();
       changed();
     });
-    row.append(box, document.createTextNode(label));
+    const reset = defaultButton(fallback ? 'on' : 'off', () => {
+      box.checked = fallback;
+      set(fallback);
+      mark();
+      changed();
+    });
+    mark();
+    row.append(box, document.createTextNode(label), reset);
     return row;
   };
   return fieldset('Brush strokes', 'Strokes inside each area: they start and end inside it and never cross an edge. Sizes are screen pixels at a zoom step; tiles are repainted when you change them.', [
@@ -506,6 +604,8 @@ function strokeControls(): HTMLElement {
     slider({ label: 'Follow edges: within (px)', min: 5, max: 300, step: 5, get: () => s().flowDistance, set: (v) => (s().flowDistance = v) }),
     slider({ label: 'Paint load: colour change', min: 0, max: 1, step: 0.01, get: () => s().load, set: (v) => (s().load = v) }),
     slider({ label: 'Paint load: strokes per dip', min: 2, max: 10, step: 1, get: () => s().loadCycle, set: (v) => (s().loadCycle = v) }),
+    slider({ label: 'Speed: bristles at least (px apart, 0 = all)', min: 0, max: 4, step: 0.1, get: () => s().bristleSpacing, set: (v) => (s().bristleSpacing = v) }),
+    slider({ label: 'Speed: points every (brush widths, 0 = every px)', min: 0, max: 1, step: 0.01, get: () => s().pointSpacing, set: (v) => (s().pointSpacing = v) }),
     slider({ label: 'Colour variation', min: 0, max: 0.6, step: 0.01, get: () => s().shade, set: (v) => (s().shade = v) }),
     slider({ label: 'Lighter strokes (share)', min: 0, max: 1, step: 0.01, get: () => s().light, set: (v) => (s().light = v) }),
     colorRow('Darker towards', () => s().ink, (rgb) => (s().ink = rgb)),
@@ -525,15 +625,16 @@ function gradientControls(title: string, hint: string, key: 'shallow' | 'landRim
 }
 
 function buildSettings(): void {
-  const { tuning } = state;
+  // Read live, so the defaults column can read the same fields from the defaults.
+  const tuning = () => state.tuning;
   settingsRoot.replaceChildren(
     fieldset('Pigment and paper (step 1)', 'Screen colours become paint from one box: less saturated, lighter, sharing an undertone, laid as a glaze over warm paper.', [
-      slider({ label: 'Mute saturation', min: 0, max: 1, step: 0.01, get: () => tuning.pigment.mute, set: (v) => (tuning.pigment.mute = v) }),
-      slider({ label: 'Lighten (water in the paint)', min: 0, max: 0.6, step: 0.01, get: () => tuning.pigment.lighten, set: (v) => (tuning.pigment.lighten = v) }),
-      slider({ label: 'Towards the undertone', min: 0, max: 0.6, step: 0.01, get: () => tuning.pigment.undertoneAmount, set: (v) => (tuning.pigment.undertoneAmount = v) }),
-      colorRow('Undertone', () => tuning.pigment.undertone, (rgb) => (tuning.pigment.undertone = rgb)),
-      colorRow('Paper', () => tuning.paper, (rgb) => (tuning.paper = rgb)),
-      slider({ label: 'Glaze opacity', min: 0.3, max: 1, step: 0.01, get: () => tuning.glaze, set: (v) => (tuning.glaze = v) }),
+      slider({ label: 'Mute saturation', min: 0, max: 1, step: 0.01, get: () => tuning().pigment.mute, set: (v) => (tuning().pigment.mute = v) }),
+      slider({ label: 'Lighten (water in the paint)', min: 0, max: 0.6, step: 0.01, get: () => tuning().pigment.lighten, set: (v) => (tuning().pigment.lighten = v) }),
+      slider({ label: 'Towards the undertone', min: 0, max: 0.6, step: 0.01, get: () => tuning().pigment.undertoneAmount, set: (v) => (tuning().pigment.undertoneAmount = v) }),
+      colorRow('Undertone', () => tuning().pigment.undertone, (rgb) => (tuning().pigment.undertone = rgb)),
+      colorRow('Paper', () => tuning().paper, (rgb) => (tuning().paper = rgb)),
+      slider({ label: 'Glaze opacity', min: 0.3, max: 1, step: 0.01, get: () => tuning().glaze, set: (v) => (tuning().glaze = v) }),
     ]),
     gradientControls('Shallow water (step 2)', 'Water is lighter near its shore. In map units, so it zooms with the map.', 'shallow'),
     gradientControls('Land rim (step 2)', 'Land is a little darker near its edge and lighter inside.', 'landRim'),
@@ -541,14 +642,14 @@ function buildSettings(): void {
     strokeControls(),
     layerControls('grain', 'Grain', 'What it is painted on: about the same size on screen at every zoom, cross-faded between zoom steps.', 512),
     fieldset('Edge', 'Paint pooled along the inside of each area: darkest at the edge, fading inward. In screen pixels.', [
-      slider({ label: 'Width (px)', min: 0, max: 60, step: 0.5, get: () => tuning.edge.width, set: (v) => (tuning.edge.width = v) }),
-      slider({ label: 'Opacity at the edge', min: 0, max: 0.6, step: 0.005, get: () => tuning.edge.alpha, set: (v) => (tuning.edge.alpha = v) }),
-      slider({ label: 'Falloff (1 = even, higher = thin dark rim)', min: 0.3, max: 6, step: 0.1, get: () => tuning.edge.falloff, set: (v) => (tuning.edge.falloff = v) }),
-      slider({ label: 'Steps (smoothness)', min: 2, max: 24, step: 1, get: () => tuning.edge.steps, set: (v) => (tuning.edge.steps = v) }),
-      colorRow('Colour', () => tuning.edgeColor, (rgb) => (tuning.edgeColor = rgb)),
+      slider({ label: 'Width (px)', min: 0, max: 60, step: 0.5, get: () => tuning().edge.width, set: (v) => (tuning().edge.width = v) }),
+      slider({ label: 'Opacity at the edge', min: 0, max: 0.6, step: 0.005, get: () => tuning().edge.alpha, set: (v) => (tuning().edge.alpha = v) }),
+      slider({ label: 'Falloff (1 = even, higher = thin dark rim)', min: 0.3, max: 6, step: 0.1, get: () => tuning().edge.falloff, set: (v) => (tuning().edge.falloff = v) }),
+      slider({ label: 'Steps (smoothness)', min: 2, max: 24, step: 1, get: () => tuning().edge.steps, set: (v) => (tuning().edge.steps = v) }),
+      colorRow('Colour', () => tuning().edgeColor, (rgb) => (tuning().edgeColor = rgb)),
     ]),
     fieldset('Tiles', 'Larger tiles repeat less but take longer to make.', [
-      slider({ label: 'Tile size (px)', min: 128, max: 1024, step: 128, get: () => tuning.tileSize, set: (v) => (tuning.tileSize = v) }),
+      slider({ label: 'Tile size (px)', min: 128, max: 1024, step: 128, get: () => tuning().tileSize, set: (v) => (tuning().tileSize = v) }),
     ]),
   );
 }
@@ -570,6 +671,29 @@ document.querySelector('#copy')!.addEventListener('click', async () => {
     // The text is selected in the box, ready to copy by hand.
   }
 });
+const pasteStatus = document.querySelector<HTMLParagraphElement>('#paste-status')!;
+document.querySelector('#paste')!.addEventListener('click', async () => {
+  // The clipboard first; if the browser does not allow it, the text pasted into the box below.
+  let text = '';
+  try {
+    text = await navigator.clipboard.readText();
+  } catch {
+    text = '';
+  }
+  if (!text.trim()) text = output.value;
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('the text is not a settings object');
+    state.tuning = mergeTuning(parsed as Partial<WashTuning>);
+    buildSettings();
+    changed();
+    pasteStatus.textContent = 'Settings pasted.';
+  } catch (error) {
+    pasteStatus.textContent = `Could not paste: ${error instanceof Error ? error.message : String(error)}. Paste the copied text into the box below and press Paste settings again.`;
+    output.focus();
+  }
+});
+
 document.querySelector('#reset')!.addEventListener('click', () => {
   state.tuning = copyTuning(defaultWashTuning);
   buildSettings();
@@ -584,29 +708,33 @@ function save(): void {
   }
 }
 
+/** Settings from saved or pasted text, with the defaults filled in for anything missing or added since. */
+function mergeTuning(saved: Partial<WashTuning>): WashTuning {
+  const tuning = copyTuning(defaultWashTuning);
+  const merged = {
+    ...tuning,
+    ...saved,
+    wash: { ...tuning.wash, ...saved.wash },
+    grain: { ...tuning.grain, ...saved.grain },
+    // Strokes saved before they were painted per area used other units; those are dropped.
+    strokes: { ...tuning.strokes, ...(saved.strokes && 'spacing' in saved.strokes ? saved.strokes : {}) },
+    edge: { ...tuning.edge, ...saved.edge },
+    pigment: { ...tuning.pigment, ...saved.pigment },
+    shallow: { ...tuning.shallow, ...saved.shallow },
+    landRim: { ...tuning.landRim, ...saved.landRim },
+  };
+  // Settings saved before the edge became a gradient had two bands instead.
+  delete (merged as { edges?: unknown }).edges;
+  return copyTuning(merged);
+}
+
 function load(): Saved | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const saved = JSON.parse(raw) as Partial<Saved>;
-    // Fill in fields added since the settings were saved.
-    const tuning = copyTuning(defaultWashTuning);
-    const merged = {
-      ...tuning,
-      ...saved.tuning,
-      wash: { ...tuning.wash, ...saved.tuning?.wash },
-      grain: { ...tuning.grain, ...saved.tuning?.grain },
-      // Strokes saved before they were painted per area used other units; those are dropped.
-      strokes: { ...tuning.strokes, ...(saved.tuning?.strokes && 'spacing' in saved.tuning.strokes ? saved.tuning.strokes : {}) },
-      edge: { ...tuning.edge, ...saved.tuning?.edge },
-      pigment: { ...tuning.pigment, ...saved.tuning?.pigment },
-      shallow: { ...tuning.shallow, ...saved.tuning?.shallow },
-      landRim: { ...tuning.landRim, ...saved.tuning?.landRim },
-    };
-    // Settings saved before the edge became a gradient had two bands instead.
-    delete (merged as { edges?: unknown }).edges;
     return {
-      tuning: merged,
+      tuning: mergeTuning(saved.tuning ?? {}),
       // Settings saved before step 1 had blotches and grain on; they start off now, as step 1 drops them.
       show: { ...defaultShow, ...saved.show, ...(saved.show && !('palette' in saved.show) ? { wash: false, grain: false } : {}) },
     };

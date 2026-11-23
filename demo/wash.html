@@ -23,6 +23,13 @@
         <label><input id="anchor-screen" type="checkbox" /> Anchor texture to the screen (the wrong way, to compare)</label>
       </div>
       <div class="toolbar">
+        <strong>Show</strong>
+        <label><input type="radio" name="viewing" value="custom" checked /> Custom</label>
+        <label><input type="radio" name="viewing" value="defaults" /> Defaults</label>
+        <span class="hint">Press D to switch. Marked fields differ from the defaults.</span>
+        <button id="checkboxes-default" type="button">Checkboxes to defaults</button>
+      </div>
+      <div class="toolbar">
         <strong>Step 1</strong>
         <label><input id="show-palette" type="checkbox" /> Pigment palette</label>
         <label><input id="show-glaze" type="checkbox" /> Glaze over paper</label>
@@ -50,10 +57,12 @@
       <aside class="controls">
         <div class="buttons">
           <button id="copy" type="button">Copy settings</button>
+          <button id="paste" type="button">Paste settings</button>
           <button id="reset" type="button">Reset to defaults</button>
         </div>
         <div id="settings"></div>
-        <textarea id="output" rows="10" readonly></textarea>
+        <p id="paste-status" class="hint" role="status"></p>
+        <textarea id="output" rows="10" spellcheck="false" aria-label="Settings as JSON. Paste here if the browser does not allow reading the clipboard."></textarea>
       </aside>
     </main>
 
