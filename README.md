@@ -83,6 +83,21 @@ Behaviour to rely on:
 - `x` and `y` only move the finished strokes. Painting the same lines with the same scale and seed at two offsets gives the same strokes, so neighbouring tiles join up.
 - The context can be a `CanvasRenderingContext2D` or an `OffscreenCanvasRenderingContext2D`.
 
+### Width per line and along a line
+
+*Since 0.3.0.* A line can set its own brush width with `width`, and a width at its end with `widthEnd`, so roads of different widths go in one call and a river can widen towards the sea:
+
+```ts
+const river: SvgLine = { ...riverGeometry, color: '#2a6f97', seed: 'river-3', width: 3, widthEnd: 14 };
+const road: SvgLine = { ...roadGeometry, color: '#7a5c3a', seed: 'road-1', width: 5 };
+paintLines(context, [river, road], { size: 8, transform: { scale: 2 } }); // other lines use size 8
+```
+
+- `width` takes the place of `size` for that line, and follows the same rule: it is in canvas pixels and is **not** multiplied by `transform.scale` (or by `planLines`' `scale`). A line with `width: 6` paints exactly like the same line without it in a call with `size: 6`. To make a width follow the zoom, multiply it by the zoom yourself.
+- With `widthEnd`, the width changes linearly with the distance along the line, from `width` (or `size` when `width` is not set) at the first point as given to `widthEnd` at the last, whichever way the hand then paints it. The touch-down and lift-off tapers still apply on top, each as long as the brush is wide at its end.
+- A line of width 0 paints nothing. A negative width, `NaN` or `Infinity` throws a `RangeError`.
+- The bristles spread with the width. With `lodBristleSpacing` or `lodSingleStroke` on, a narrow line gets fewer bristles or a single stroke, measured by its own width (its widest, for a line that changes width).
+
 ## Parsing without painting
 
 `parseSvg(text)` turns SVG text into lines without painting them. Use it to parse once and keep the geometry, for example to store it in your own format. It needs no DOM, so it also runs in Node and in web workers (*since 0.3.0*; before that it needed a `DOMParser`).
@@ -99,7 +114,7 @@ The result is plain data that can be stored as JSON:
 | Type | Fields |
 |------|--------|
 | `ParsedSvg` | `width` and `height` of the SVG in CSS pixels, and `lines` in document order. |
-| `SvgLine` | One continuous line: `start` (a `Point`), `segments`, `closed`, `color`, and an optional `seed`. |
+| `SvgLine` | One continuous line: `start` (a `Point`), `segments`, `closed`, `color`, and an optional `seed`. *Since 0.3.0* also an optional `width` and `widthEnd` (see above); `parseSvg` does not set them. |
 | `Segment` | `{ kind: 'line', to }` or `{ kind: 'cubic', c1, c2, to }`. Arcs and quadratic curves are converted to cubics. |
 | `Point` | `{ x, y }`. |
 
@@ -168,7 +183,7 @@ paintLines(context, lines, { brush: 'round', size: 6 });
 | `seedPrefix` | `''` | Put before each line's seed. Seeds are `<prefix><n>` for the first subpath of the n-th stroke and `<prefix><n>/<i>` for later subpaths. Only strokes are counted, so adding a fill does not change how the strokes paint. |
 | `scale` | `1` | Multiplies the points and the width. |
 
-Each line also has `width` (the stroke width after `scale`) and `opacity`. `paintLines` paints every line with the brush `size` for now and ignores both, so use them to choose a `size` per call, or for your own drawing.
+Each line also has `width` (the stroke width after `scale`) and `opacity`. `width` is `SvgLine.width`, so `paintLines` paints each line with a brush as wide as its stroke instead of `size`. Like `size`, it is read in canvas pixels and not multiplied by `transform.scale`, so to paint at the SVG's stroke widths put the zoom in this function's `scale` and leave the transform's at 1. To paint with `size` instead, drop the field: `lines.map(({ width, ...line }) => line)`. `paintLines` ignores `opacity`.
 
 ### Colours
 
@@ -226,6 +241,67 @@ The polygon is right when filled with the **nonzero** rule, which is what `ctx.f
 - a closed line covers its first segment twice.
 
 One union resolves all of these into clean rings. Simplifying the points first, by about a twentieth of the width, keeps the polygon small and the union fast. Making the outline of 300 points takes about 1 ms; on a smooth wiggly line the union then gives one ring, while very tight zigzags, where many round joins overlap, make the union itself slow.
+
+## Line shapes
+
+*Since 0.3.0.* Functions that build or change lines before they are painted. They are plain geometry with no randomness, so the same input always gives the same lines, and each result is painted with the brush like any other line.
+
+### smoothLine and straightLine
+
+`smoothLine(points, { closed, tension })` gives segments for a smooth curve through every point, and `straightLine(points, closed)` gives straight segments, for lines a user can switch between smooth and straight. Use the result as the `segments` of a line that starts at `points[0]`.
+
+```ts
+import { smoothLine, straightLine, type SvgLine } from 'brushstroke';
+
+const segments = road.smooth ? smoothLine(road.points) : straightLine(road.points);
+const line: SvgLine = { start: road.points[0]!, segments, closed: false, color: '#7a5c3a', seed: road.id };
+const lake: SvgLine = { start: shore[0]!, segments: smoothLine(shore, { closed: true }), closed: true, color: '#2a6f97' };
+```
+
+- The curve is a **centripetal** Catmull-Rom spline as cubic Bézier segments. Unlike the uniform kind, it makes no loops or cusps where points are unevenly spaced. Tangents are continuous at every point, and the ends of an open line do not bend.
+- `closed` adds a segment from the last point back to the first, smooth at the join. A last point that repeats the first is ignored.
+- `tension` from 0 (default, Catmull-Rom) to 1 (straight segments) shortens the tangents, so the curve bends more at the points and less between them.
+- Points that repeat the one before are skipped. Fewer than 2 distinct points give `[]`.
+- `straightLine` with `closed` adds a last segment back to the first point, unless the last point already repeats it.
+
+### dashLine
+
+`dashLine(line, pattern, { offset })` cuts a line into dashes, each its own line, so each dash is painted as a brush stroke with its own touch-down and lift-off.
+
+```ts
+import { dashLine, paintLines } from 'brushstroke';
+
+const border = dashLine(borderLine, [12, 6]);         // 12 on, 6 off
+const trail = dashLine(trailLine, [0.1, 8]);          // dots
+const shifted = dashLine(borderLine, [12, 6], { offset: 4 });
+paintLines(context, [...border, ...trail], { size: 4 });
+```
+
+- `pattern` alternates dash and gap lengths in the units of the line, like SVG `stroke-dasharray`; an odd pattern is repeated once. `offset` is like `stroke-dashoffset`. An empty pattern, or one of only zeros, returns `[line]`. A negative length throws a `RangeError`.
+- Dots are dashes much shorter than the brush is wide, such as `[0.1, gap]`: the brush touches down and lifts at once, leaving a dab. Dashes of length 0 are left out.
+- Segments are cut exactly: a cubic is cut into the cubic that runs over the same part of the curve, found numerically to well below a thousandth of a unit. Anchors inside a dash are kept, so a dash can turn a corner.
+- On a closed line, a dash that runs over the start point is one dash. The dashes are open lines in order along the line.
+- Each dash keeps the line's fields with its own `seed`, `<seed>/d<n>` for the n-th dash from 0, so it keeps its look as long as its place in the pattern does, for example when the line grows at its end. A line without a seed gives dashes without one.
+- `width` is kept. With `widthEnd`, each dash gets the widths the line has where it starts and ends (and the line must have `width` too).
+
+### offsetLine and doubleLine
+
+`offsetLine(line, distance, { tolerance, miterLimit })` gives a line parallel to `line`, and `doubleLine(line, gap, options)` gives two, `gap` apart, for double-line roads.
+
+```ts
+import { doubleLine, offsetLine } from 'brushstroke';
+
+const [left, right] = doubleLine(highway, 6);  // seeds 'highway-2/L' and 'highway-2/R'
+const bank = offsetLine(river, -4);            // 4 units to the left of the direction of travel
+```
+
+- A positive `distance` is on the right of the direction of travel on screen, where y points down: a line drawn left to right moves down. `doubleLine` gives the left line first.
+- Straight segments, and the corners between them, are exact: the outer side of a corner gets a mitre, or a bevel when the mitre would reach farther than `miterLimit` (default 4) distances from the corner, and the inner side is trimmed where the two offset segments cross.
+- A cubic has no exact cubic offset. Each becomes cubics with exact ends and end tangents, split until no checked point is farther than `tolerance` (default a hundredth of the distance) from the true parallel curve.
+- Where a curve bends tighter than the distance on the inner side, the true parallel curve has a cusp, and the result makes a small loop there. At a sharp corner next to a curve, the inner side is joined with a short straight segment that can backtrack a little.
+- The result keeps the line's fields, `width` and `widthEnd` included. `offsetLine` keeps the `seed`; `doubleLine` gives `<seed>/L` and `<seed>/R`, or none when the line has none.
+
+The functions combine: `doubleLine(line, 6).flatMap((side) => dashLine(side, [10, 5]))` gives a dashed double line.
 
 ## Development
 

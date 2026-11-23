@@ -92,20 +92,49 @@ export function planStrokes(
   const spacing = Math.max(POINT_SPACING, brush.size * tuning.lodPointSpacing);
 
   lines.forEach((svgLine, index) => {
+    const width = lineWidth(svgLine, brush.size);
+    // A line of width 0 leaves no paint.
+    if (width && width.size === 0) return;
+    const lineBrush = width ? { ...brush, size: width.size } : brush;
     // Skipping a line leaves the randomness of the others alone: it is forked by index or seed.
-    if (bounds && !intersects(lineBox(svgLine, factor, margin), bounds)) return;
+    if (bounds && !intersects(lineBox(svgLine, factor, width ? paintedMargin(lineBrush, tuning) : margin), bounds)) return;
     const lineRandom = svgLine.seed === undefined ? random.fork(index) : seeded.fork(lineSeedNumber(svgLine.seed));
     const scaled = { ...applyToSubpath(scale(factor, factor), svgLine), color: svgLine.color };
+    const lineSpacing = width ? Math.max(POINT_SPACING, Math.min(width.start, width.end) * tuning.lodPointSpacing) : spacing;
+    const flat = flattenLine(scaled, tuning, lineSpacing);
+    if (width && width.start !== width.end) {
+      // The width changes with the distance along the line as given, before it is split or turned round.
+      for (const point of flat.points) {
+        point.width = width.start + (width.end - width.start) * (flat.length > 0 ? point.distance / flat.length : 0);
+      }
+    }
     // Each piece of a split line is its own stroke, with its own randomness.
-    splitAtCorners(flattenLine(scaled, tuning, spacing), tuning, spacing).forEach((piece, pieceIndex) => {
+    splitAtCorners(flat, tuning, lineSpacing).forEach((piece, pieceIndex) => {
       const strokeRandom = lineRandom.fork(pieceIndex);
       const wobble = createNoise1D(Math.floor(strokeRandom.fork(2).next() * 4294967296));
-      const stroke = wobbleLine(orientLine(piece, brush.hand), tuning, wobble);
+      const stroke = wobbleLine(orientLine(piece, lineBrush.hand), tuning, wobble);
       const noise = createNoise1D(Math.floor(strokeRandom.fork(0).next() * 4294967296));
-      const pressure = linePressure(stroke, brush.size, tuning, noise);
-      paintBristles(stroke, pressure, brush, tuning, strokeRandom.fork(1), paper, sink);
+      const pressure = linePressure(stroke, lineBrush.size, tuning, noise);
+      paintBristles(stroke, pressure, lineBrush, tuning, strokeRandom.fork(1), paper, sink);
     });
   });
+}
+
+/**
+ * A line's own brush width: at its start, at its end, and the widest (the
+ * size its bristles are laid out for). Undefined when the line sets neither
+ * `width` nor `widthEnd`, so it paints with the brush size.
+ */
+function lineWidth(line: SvgLine, size: number): { start: number; end: number; size: number } | undefined {
+  if (line.width === undefined && line.widthEnd === undefined) return undefined;
+  for (const value of [line.width, line.widthEnd]) {
+    if (value !== undefined && !(Number.isFinite(value) && value >= 0)) {
+      throw new RangeError(`brushstroke: a line width must be a number of 0 or more, not ${value}`);
+    }
+  }
+  const start = line.width ?? size;
+  const end = line.widthEnd ?? start;
+  return { start, end, size: Math.max(start, end) };
 }
 
 /** How far paint can reach from a line's geometry: the brush, its bristles' width, the wobble and the overshoot at splits. */

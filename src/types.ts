@@ -28,6 +28,24 @@ export interface SvgLine extends Subpath {
    * on its position in the list.
    */
   seed?: string | number;
+  /**
+   * Brush width for this line, used instead of the `size` option. It follows
+   * the same rule as `size`: it is in output (canvas or plan) pixels and is
+   * not multiplied by `transform.scale` or the `scale` of `planLines`, so the
+   * brush keeps its width on screen when the map zooms. Default: `size`.
+   * *Since 0.3.0.*
+   */
+  width?: number;
+  /**
+   * Brush width at the end of the line, in the same pixels as `width`. The
+   * width changes linearly with the distance along the line, from `width` (or
+   * `size`) at the start to `widthEnd` at the end, for example a river that
+   * widens towards the sea. The touch-down and lift-off tapers still apply on
+   * top. "Start" is the first point of the line as given, whichever way the
+   * painter's hand then paints it. Default: the same as `width`.
+   * *Since 0.3.0.*
+   */
+  widthEnd?: number;
 }
 
 /** A filled shape. All subpaths fill together with the fill rule, so inner subpaths can be holes. */

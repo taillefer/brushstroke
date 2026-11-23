@@ -12,20 +12,21 @@ Only lines are painted. Elements that have a fill and no stroke are skipped. The
 |-------|--------|
 | Language | TypeScript, ES modules |
 | Build | Vite library mode (`dist/brushstroke.js`) plus `tsc` for type declarations |
-| Tests | Vitest, in Node. Tests that need `DOMParser` use `// @vitest-environment happy-dom` |
+| Tests | Vitest, in Node. Parsing needs no DOM; only `test/xmlDomParity.test.ts` uses `// @vitest-environment happy-dom` to compare with `DOMParser` |
 | Runtime dependencies | None. Keep it that way |
 
 ## How it works
 
 The pipeline runs in this order. Every step before drawing is a plain function with no canvas, so it can be tested in Node.
 
+0. Optionally, the caller shapes its lines first with the line shape functions: `smoothLine` and `straightLine` (`src/geometry/smoothLine.ts`) build segments from points, `dashLine` (`src/geometry/dash.ts`) cuts a line into dashes, and `offsetLine` and `doubleLine` (`src/geometry/offset.ts`) make parallel lines. They return ordinary `SvgLine`s with derived seeds (`<seed>/d<n>`, `<seed>/L`, `<seed>/R`), so each piece goes through the steps below as its own line. They are exact geometry with no randomness; the shared Bézier helpers (point, tangent, cut, arc length) are in `src/geometry/bezier.ts`.
 1. Parse the SVG text into lines with their stroke colour (`src/parse/`).
-2. Flatten each line into points about 1 px apart, and mark anchors and corners (`src/geometry/flatten.ts`).
+2. Flatten each line into points about 1 px apart, and mark anchors and corners (`src/geometry/flatten.ts`). A line with its own `width` is planned with that as the brush size (`lineWidth` in `src/plan.ts`); one with `widthEnd` also gets a `width` on every point, interpolated by distance along the line as given, which the later steps carry along (split overshoots copy it).
 3. Split each line into separate strokes at sharp corners (`src/geometry/split.ts`). From here on, each piece is its own stroke with its own forked randomness.
 4. Orient each stroke for the painter's hand (`src/hand.ts`).
 5. Add hand wobble: a small sideways drift (`src/wobble.ts`).
-6. Give each point a pressure (`src/pressure.ts`).
-7. Turn each stroke into bristle paths, with paint pooling, dryness and paper grain (`src/brush/`).
+6. Give each point a pressure (`src/pressure.ts`). The tapers use the point width at each end when there is one.
+7. Turn each stroke into bristle paths, with paint pooling, dryness and paper grain (`src/brush/`). With point widths, the bristles are laid out for the line's widest width, their offsets scale with each point's width, and their paths vary in width (`varies`).
 8. Draw the bristle paths on a canvas (`src/render.ts`).
 
 The public API has two levels (see `docs/adr/0001-paint-lines-as-well-as-svg.md`). `paintLines` (`src/paintLines.ts`) paints lines the caller already holds onto an existing context: steps 2–8. `paintSvg` (`src/paintSvg.ts`) loads and parses an SVG, then sizes and clears a canvas and runs the same steps.
@@ -40,7 +41,7 @@ Level of detail is opt-in through three `Tuning` fields that are off at 0: `lodB
 
 `test/callLog.test.ts` is the safety net for speed work: it checks the canvas calls `paintLines` makes against fixtures in `test/fixtures/calls/`, recorded before any optimisation. It compares what each `stroke()` paints with its full state, so skipping a redundant state change passes and anything that changes pixels fails. Do not regenerate the fixtures to make a speed-up pass.
 
-Scaling is applied to the geometry before step 2, never to the canvas, so every look number stays in output pixels. An offset is applied only when drawing, so it moves finished strokes without changing them. The paper grain belongs to the whole painting, not to one stroke, so it stays in place across strokes.
+Scaling is applied to the geometry before step 2, never to the canvas, so every look number stays in output pixels. A line's `width` and `widthEnd` follow the same rule as `size`: output pixels, not scaled. Lines without them must plan exactly as before (the call-log fixtures check this). An offset is applied only when drawing, so it moves finished strokes without changing them. The paper grain belongs to the whole painting, not to one stroke, so it stays in place across strokes.
 
 Two rules hold across the code:
 

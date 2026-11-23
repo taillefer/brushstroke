@@ -17,6 +17,11 @@ export interface LinePoint extends Point {
   corner: boolean;
   /** How much the line turns at this point, in radians, measured over a few pixels. */
   turn: number;
+  /**
+   * Brush width at this point, in pixels. Only set on a line whose width
+   * changes along it (`SvgLine.widthEnd`); otherwise the brush size applies.
+   */
+  width?: number;
 }
 
 export interface FlatLine {

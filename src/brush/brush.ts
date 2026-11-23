@@ -109,7 +109,7 @@ export function paintBristles(
     if (count < tuning.bristleCount) tuning = { ...tuning, bristleCount: count };
   }
   const bristles = createBristles(options, tuning, random);
-  const width = Math.max(0.5, (options.size / tuning.bristleCount) * tuning.bristleWidth);
+  const width = Math.max(MIN_BRISTLE_WIDTH, (options.size / tuning.bristleCount) * tuning.bristleWidth);
   // The edge of the mark fades over the space between two bristles, so it is soft rather than stepped.
   const edgeSoftness = 0.5 / tuning.bristleCount;
   // Paint pools where the brush touches down and where it pauses at a corner.
@@ -123,6 +123,12 @@ export function paintBristles(
   const reaches = new Float64Array(count);
   const darknesses = new Float64Array(count);
   const pools = new Float64Array(count);
+  // On a line whose width changes, the bristles move in and out with it, and
+  // each one gets thinner where the brush is narrower (never below the
+  // thinnest bristle). `options.size` is then the widest the line gets.
+  const narrows = line.points[0]?.width !== undefined;
+  const spreads = narrows ? widthShares(line, options.size) : null;
+  const bristleShares = spreads ? spreads.map((share) => Math.max(share, MIN_BRISTLE_WIDTH / width)) : null;
   for (let i = 0; i < count; i++) {
     const p = pressure[i] ?? 0;
     pressures[i] = p;
@@ -133,22 +139,33 @@ export function paintBristles(
   const { bristleOpacity, grainAmount, grainContrast } = tuning;
 
   for (const bristle of bristles) {
-    sink.beginPath(line.color, width, count, false);
+    sink.beginPath(line.color, width, count, narrows);
     const { x: offsetX, y: offsetY } = bristle.offset;
     for (let i = 0; i < count; i++) {
       const point = points[i]!;
       const contact = clamp01((reaches[i]! - bristle.reach) / edgeSoftness + 0.5);
       const left = paintLeft(bristle, point.distance, tuning);
-      const x = point.x + offsetX;
-      const y = point.y + offsetY;
+      const spread = spreads ? spreads[i]! : 1;
+      const x = spreads ? point.x + offsetX * spread : point.x + offsetX;
+      const y = spreads ? point.y + offsetY * spread : point.y + offsetY;
       // grainCoverage, inlined.
       const waterline = grainAmount * (1 - pressures[i]! * left);
       const grain = clamp01(1 - (waterline - paper(x, y)) * grainContrast);
       const alpha = Math.min(1, bristleOpacity * contact * darknesses[i]! * pools[i]! * left * grain);
-      sink.point(x, y, alpha, 1);
+      sink.point(x, y, alpha, bristleShares ? bristleShares[i]! : 1);
     }
     sink.endPath();
   }
+}
+
+// The thinnest a bristle's track is drawn, in pixels. A drawing limit, not part of the look.
+const MIN_BRISTLE_WIDTH = 0.5;
+
+/** Each point's brush width as a share of `size`, the widest the line gets. */
+function widthShares(line: FlatLine, size: number): Float64Array {
+  const shares = new Float64Array(line.points.length);
+  line.points.forEach((point, i) => (shares[i] = size > 0 ? Math.min(1, (point.width ?? size) / size) : 1));
+  return shares;
 }
 
 /**
@@ -176,6 +193,7 @@ function paintSingleStroke(
     gapNoise: createNoise1D(Math.floor(random.fork(0).next() * 4294967296)),
   };
   const layers = Math.max(1, tuning.bristleWidth);
+  const spreads = line.points[0]?.width !== undefined ? widthShares(line, options.size) : null;
 
   sink.beginPath(line.color, options.size, line.points.length, true);
   line.points.forEach((point, i) => {
@@ -186,7 +204,7 @@ function paintSingleStroke(
     const left = paintLeft(bristle, point.distance, tuning);
     const grain = grainCoverage(paper(point.x, point.y), p * left, tuning);
     const layer = Math.min(1, tuning.bristleOpacity * darkness * pooled * left * grain);
-    sink.point(point.x, point.y, 1 - (1 - layer) ** layers, share);
+    sink.point(point.x, point.y, 1 - (1 - layer) ** layers, spreads ? share * spreads[i]! : share);
   });
   sink.endPath();
 }

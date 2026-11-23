@@ -16,3 +16,6 @@ export { strokesToLines, type StrokeLine, type StrokesToLinesOptions } from './s
 export { flattenSubpath } from './geometry/flattenSubpath';
 export { simplify } from './geometry/simplify';
 export { strokeOutline, type StrokeOutlineOptions } from './geometry/outline';
+export { smoothLine, straightLine, type SmoothLineOptions } from './geometry/smoothLine';
+export { dashLine, type DashLineOptions } from './geometry/dash';
+export { doubleLine, offsetLine, type OffsetLineOptions } from './geometry/offset';

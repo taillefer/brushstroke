@@ -74,6 +74,8 @@ function extension(points: LinePoint[], end: 'start' | 'end', length: number, sp
     anchor: false,
     corner: false,
     turn: 0,
+    // The overshoot keeps the width the line has at the corner.
+    ...(tip.width === undefined ? {} : { width: tip.width }),
   }));
   return end === 'end' ? added : added.reverse();
 }

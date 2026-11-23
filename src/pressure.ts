@@ -25,8 +25,9 @@ export function linePressure(
   const spread = tuning.slowdownLength * brushSize;
   const anchorBump = bumpAround(line, points.filter((p) => p.anchor).map((p) => p.distance), spread);
   const cornerBump = bumpAround(line, points.filter((p) => p.corner).map((p) => p.distance), spread);
-  const startLength = tuning.startTaperLength * brushSize;
-  const endLength = tuning.endTaperLength * brushSize;
+  // On a line whose width changes, each taper is as long as the brush is wide at its end.
+  const startLength = tuning.startTaperLength * (points[0]?.width ?? brushSize);
+  const endLength = tuning.endTaperLength * (points[points.length - 1]?.width ?? brushSize);
 
   return points.map((point, i) => {
     const direction = travelDirectionY(line, i);

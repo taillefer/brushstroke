@@ -2,7 +2,14 @@ import type { ParsedSvgDrawing, Point, Segment, Subpath, SvgLine } from './types
 
 /** A line from a stroke of a drawing, with the stroke's width and opacity. */
 export interface StrokeLine extends SvgLine {
-  /** The stroke width in the same units as the points, after `scale`. */
+  /**
+   * The stroke width in the same units as the points, after `scale`. This is
+   * `SvgLine.width`, so `paintLines` paints the line with a brush this wide
+   * instead of `size`. Like `size`, `paintLines` reads it in canvas pixels and
+   * does not multiply it by `transform.scale`: to paint at the SVG's stroke
+   * widths, put the zoom in this function's `scale` rather than in the
+   * transform.
+   */
   width: number;
   /** From 0 to 1, as on the stroke. */
   opacity: number;
