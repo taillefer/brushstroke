@@ -74,6 +74,7 @@ It takes `brush`, `size`, `hand` and `tuning` like `paintSvg`. It also takes:
 |--------|---------|--------------|
 | `seed` | `0` | The seed for the variations. There is no SVG text to hash. |
 | `transform` | `{ scale: 1, x: 0, y: 0 }` | Maps line coordinates to canvas pixels. |
+| `anchorScale` | `transform.scale` | The scale the noise is laid out at, so it stays in place while zooming (see below). |
 
 Behaviour to rely on:
 
@@ -82,6 +83,24 @@ Behaviour to rely on:
 - Scaling the context itself, with `context.scale()` or `setTransform()`, scales everything, the brush included. To zoom a map and keep the brush the same size on screen, put the zoom in `options.transform.scale` and leave the context's transform for the pixel ratio.
 - `x` and `y` only move the finished strokes. Painting the same lines with the same scale and seed at two offsets gives the same strokes, so neighbouring tiles join up.
 - The context can be a `CanvasRenderingContext2D` or an `OffscreenCanvasRenderingContext2D`.
+
+### Keeping the texture in place while zooming
+
+*Since 0.4.0.* The look numbers in `Tuning` are in canvas pixels, so the pressure bumps, the hand's wobble, the dry patches and the paper grain are laid out in canvas pixels too. Paint a coast at `scale: 1` and again at `scale: 2`, and a dry patch 60 px from the start of the line is 60 px from the start both times: half as far along the coast at the second scale. On a map that zooms smoothly, the texture slides along the lines while the user pinches.
+
+`anchorScale` lays the noise out at a fixed scale instead:
+
+```ts
+const step = 2 ** Math.floor(Math.log2(zoom)); // the zoom step the map is in
+paintLines(context, coast, { size: 6, transform: { scale: zoom }, anchorScale: step });
+```
+
+- The pressure noise, the wobble's bends, where bristles run dry and the paper grain are sampled at line coordinates × `anchorScale`. While `anchorScale` stays the same, they stay at the same places on the lines, whatever `transform.scale` is.
+- Their sizes in `Tuning` hold at `anchorScale`. At twice that scale the bumps and the grain are twice as large on the canvas.
+- The brush size, the wobble's sideways reach, the tapers and the pools stay in canvas pixels, as without it.
+- The default is `transform.scale` (for `planLines`, `scale`), which paints exactly as before.
+- Holding it at a zoom step, as above, keeps the texture in place within the step and keeps its size on screen between half and twice the tuned one. At a step change the texture changes; cross-fade the two steps to hide it.
+- It must be a number above 0, or `RangeError` is thrown.
 
 ### Width per line and along a line
 

@@ -22,6 +22,19 @@ export interface PlanLinesOptions extends BrushStyle {
    * that are kept look exactly as without `bounds`.
    */
   bounds?: Rect;
+  /**
+   * The scale at which the brush's noise is laid out. The pressure bumps, the
+   * hand's wobble, where bristles run dry and the paper grain are sampled at
+   * line coordinates × `anchorScale`, so they stay at the same places on the
+   * lines when only `scale` changes. Their sizes in `Tuning` hold at
+   * `anchorScale`: at twice that scale, a bump is twice as long on the
+   * canvas. The brush size and the wobble's sideways reach stay in plan
+   * pixels. Default: `scale`, which keeps every look number in plan pixels.
+   *
+   * A map that zooms smoothly can hold `anchorScale` at the zoom step it is
+   * in, so nothing slides along the coast while the user pinches.
+   */
+  anchorScale?: number;
 }
 
 /**
@@ -40,6 +53,7 @@ export function planLines(lines: SvgLine[], options: PlanLinesOptions = {}): Str
     resolveTuning(options.tuning),
     builder,
     options.bounds,
+    noiseRatio(options.anchorScale, options.scale ?? 1),
   );
   return builder.finish();
 }
@@ -81,13 +95,15 @@ export function planStrokes(
   tuning: Tuning,
   sink: BristleSink,
   bounds?: Rect,
+  ratio = 1,
 ): void {
   const random = createRandom(seed);
   // The paper is shared by all strokes. Lines without a seed use forks 0, 1, 2…
   // by position, the paper takes -1, and lines with their own seed fork from -2.
   const seeded = random.fork(-2);
   const grain = createNoise2D(Math.floor(random.fork(-1).next() * 4294967296));
-  const paper: Paper = (x, y) => (grain(x / tuning.grainSize, y / tuning.grainSize) + 1) / 2;
+  const grainSize = tuning.grainSize / ratio;
+  const paper: Paper = (x, y) => (grain(x / grainSize, y / grainSize) + 1) / 2;
   const margin = paintedMargin(brush, tuning);
   const spacing = Math.max(POINT_SPACING, brush.size * tuning.lodPointSpacing);
 
@@ -95,7 +111,8 @@ export function planStrokes(
     const width = lineWidth(svgLine, brush.size);
     // A line of width 0 leaves no paint.
     if (width && width.size === 0) return;
-    const lineBrush = width ? { ...brush, size: width.size } : brush;
+    const sized = width ? { ...brush, size: width.size } : brush;
+    const lineBrush = ratio === 1 ? sized : { ...sized, noiseRatio: ratio };
     // Skipping a line leaves the randomness of the others alone: it is forked by index or seed.
     if (bounds && !intersects(lineBox(svgLine, factor, width ? paintedMargin(lineBrush, tuning) : margin), bounds)) return;
     const lineRandom = svgLine.seed === undefined ? random.fork(index) : seeded.fork(lineSeedNumber(svgLine.seed));
@@ -111,13 +128,27 @@ export function planStrokes(
     // Each piece of a split line is its own stroke, with its own randomness.
     splitAtCorners(flat, tuning, lineSpacing).forEach((piece, pieceIndex) => {
       const strokeRandom = lineRandom.fork(pieceIndex);
-      const wobble = createNoise1D(Math.floor(strokeRandom.fork(2).next() * 4294967296));
+      const wobble = anchored(createNoise1D(Math.floor(strokeRandom.fork(2).next() * 4294967296)), ratio);
       const stroke = wobbleLine(orientLine(piece, lineBrush.hand), tuning, wobble);
-      const noise = createNoise1D(Math.floor(strokeRandom.fork(0).next() * 4294967296));
+      const noise = anchored(createNoise1D(Math.floor(strokeRandom.fork(0).next() * 4294967296)), ratio);
       const pressure = linePressure(stroke, lineBrush.size, tuning, noise);
       paintBristles(stroke, pressure, lineBrush, tuning, strokeRandom.fork(1), paper, sink);
     });
   });
+}
+
+/** How much farther apart the noise is sampled than the plan's pixels: `anchorScale / scale`. */
+function noiseRatio(anchorScale: number | undefined, scale: number): number {
+  if (anchorScale === undefined) return 1;
+  if (!(Number.isFinite(anchorScale) && anchorScale > 0)) {
+    throw new RangeError(`brushstroke: anchorScale must be a number above 0, not ${anchorScale}`);
+  }
+  return scale > 0 ? anchorScale / scale : 1;
+}
+
+/** Noise along a line, sampled at distances × ratio. */
+function anchored(noise: (x: number) => number, ratio: number): (x: number) => number {
+  return ratio === 1 ? noise : (x) => noise(x * ratio);
 }
 
 /**

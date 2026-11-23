@@ -13,6 +13,12 @@ export interface BrushOptions {
   /** Brush width in pixels. */
   size: number;
   hand: Hand;
+  /**
+   * Multiplies distances along the line before they meet the dry distance and
+   * the dry gaps, so a line planned at another scale runs dry at the same
+   * places. Default 1. Set by `planStrokes` from `anchorScale`.
+   */
+  noiseRatio?: number;
 }
 
 export interface BristlePoint extends Point {
@@ -137,6 +143,7 @@ export function paintBristles(
     pools[i] = 1 + tuning.poolAmount * pool[i]!;
   }
   const { bristleOpacity, grainAmount, grainContrast } = tuning;
+  const ratio = options.noiseRatio ?? 1;
 
   for (const bristle of bristles) {
     sink.beginPath(line.color, width, count, narrows);
@@ -144,7 +151,7 @@ export function paintBristles(
     for (let i = 0; i < count; i++) {
       const point = points[i]!;
       const contact = clamp01((reaches[i]! - bristle.reach) / edgeSoftness + 0.5);
-      const left = paintLeft(bristle, point.distance, tuning);
+      const left = paintLeft(bristle, point.distance * ratio, tuning);
       const spread = spreads ? spreads[i]! : 1;
       const x = spreads ? point.x + offsetX * spread : point.x + offsetX;
       const y = spreads ? point.y + offsetY * spread : point.y + offsetY;
@@ -194,6 +201,7 @@ function paintSingleStroke(
   };
   const layers = Math.max(1, tuning.bristleWidth);
   const spreads = line.points[0]?.width !== undefined ? widthShares(line, options.size) : null;
+  const ratio = options.noiseRatio ?? 1;
 
   sink.beginPath(line.color, options.size, line.points.length, true);
   line.points.forEach((point, i) => {
@@ -201,7 +209,7 @@ function paintSingleStroke(
     const share = tuning.minimumWidth + (1 - tuning.minimumWidth) * p;
     const darkness = 1 + (p - 1) * tuning.pressureDarkness;
     const pooled = 1 + tuning.poolAmount * pool[i]!;
-    const left = paintLeft(bristle, point.distance, tuning);
+    const left = paintLeft(bristle, point.distance * ratio, tuning);
     const grain = grainCoverage(paper(point.x, point.y), p * left, tuning);
     const layer = Math.min(1, tuning.bristleOpacity * darkness * pooled * left * grain);
     sink.point(point.x, point.y, 1 - (1 - layer) ** layers, spreads ? share * spreads[i]! : share);

@@ -25,6 +25,12 @@ export interface PaintLinesOptions extends BrushStyle {
    * whole, so what is painted looks the same as without it.
    */
   bounds?: Rect;
+  /**
+   * The scale at which the brush's noise is laid out, as in `planLines`. Set
+   * it to keep the grain, the wobble and the dry patches at the same places
+   * on the lines while `transform.scale` changes. Default: `transform.scale`.
+   */
+  anchorScale?: number;
 }
 
 /**
