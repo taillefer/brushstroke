@@ -43,8 +43,23 @@ textarea {
   font-weight: 600;
 }
 
+.panel .preview {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: -12px -12px 8px;
+  padding: 12px 12px 4px;
+  border-bottom: 1px solid var(--line);
+  border-radius: 8px 8px 0 0;
+  background: #fff;
+}
+
 .panel canvas {
   max-width: 100%;
+  /* A tall SVG is scaled down to leave room for the sliders. */
+  max-height: 40vh;
+  object-fit: contain;
+  object-position: left top;
   margin-bottom: 8px;
   border: none;
 }

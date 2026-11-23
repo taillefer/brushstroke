@@ -159,7 +159,11 @@ function createPanel(config: PanelConfig, index: number): Panel {
     };
   });
 
-  element.append(title, canvas, buttons, basics, sliders);
+  // The painting stays in view while the sliders below it scroll past.
+  const preview = document.createElement('div');
+  preview.className = 'preview';
+  preview.append(title, canvas);
+  element.append(preview, buttons, basics, sliders);
   panelsRoot.append(element);
 
   let frame = 0;
