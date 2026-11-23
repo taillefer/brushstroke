@@ -1,8 +1,8 @@
-import { resolveBrush, type BrushStyle } from './paintLines';
+import { resolveBrush, type BrushStyle } from './brushStyle';
 import { parseSvg } from './parse/svg';
 import { planPainting } from './plan';
 import { resolveSeed } from './random';
-import { drawPlan } from './render';
+import { drawPainting } from './render';
 import { resolveTuning } from './tuning';
 
 export interface PaintOptions extends BrushStyle {
@@ -32,7 +32,7 @@ export async function paintSvg(source: SvgSource, options: PaintOptions = {}): P
     resolveTuning(options.tuning),
   );
   const canvas = options.canvas ?? document.createElement('canvas');
-  drawPlan(canvas, plan, globalThis.devicePixelRatio || 1);
+  drawPainting(canvas, plan, globalThis.devicePixelRatio || 1);
   return canvas;
 }
 

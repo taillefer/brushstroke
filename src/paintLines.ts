@@ -1,21 +1,10 @@
-import type { BrushKind, BrushOptions } from './brush/brush';
-import type { Hand } from './hand';
 import { planLines } from './plan';
-import { drawPaths, type PaintContext } from './render';
-import { resolveTuning, type Tuning } from './tuning';
+import { drawPlan, type PaintContext } from './render';
+import type { BrushStyle } from './brushStyle';
+import type { Rect } from './strokePlan';
 import type { SvgLine } from './types';
 
-/** How the brush looks. Shared by `paintLines` and `paintSvg`. */
-export interface BrushStyle {
-  /** 'flat' (default) or 'round'. */
-  brush?: BrushKind;
-  /** Brush width in CSS pixels. Default 12. */
-  size?: number;
-  /** The painter's hand. Default 'right'. */
-  hand?: Hand;
-  /** Fine control over the look, on top of `defaultTuning`. */
-  tuning?: Partial<Tuning>;
-}
+export type { BrushStyle } from './brushStyle';
 
 /** Maps line coordinates to canvas coordinates: `canvas = line × scale + (x, y)`. */
 export interface LineTransform {
@@ -30,16 +19,17 @@ export interface PaintLinesOptions extends BrushStyle {
   /** Seed for the random variations. Default 0. Lines with their own `seed` mix it with this one. */
   seed?: number;
   transform?: LineTransform;
-}
-
-const DEFAULT_SIZE = 12;
-
-export function resolveBrush(style: BrushStyle): BrushOptions {
-  return { brush: style.brush ?? 'flat', size: style.size ?? DEFAULT_SIZE, hand: style.hand ?? 'right' };
+  /**
+   * Only paint lines that can show inside this rectangle, in canvas pixels
+   * (after the transform), for example a tile. Lines are kept or skipped
+   * whole, so what is painted looks the same as without it.
+   */
+  bounds?: Rect;
 }
 
 /**
- * Paints lines onto an existing 2D context, as if drawn with a brush.
+ * Paints lines onto an existing 2D context, as if drawn with a brush. The
+ * same as `planLines` followed by `drawPlan`.
  *
  * The canvas is not resized or cleared, and the context's own transform (for
  * example the screen's pixel ratio) applies on top of `transform`. The scale
@@ -49,9 +39,11 @@ export function resolveBrush(style: BrushStyle): BrushOptions {
  */
 export function paintLines(context: PaintContext, lines: SvgLine[], options: PaintLinesOptions = {}): void {
   const { scale = 1, x = 0, y = 0 } = options.transform ?? {};
-  const paths = planLines(lines, (options.seed ?? 0) >>> 0, scale, resolveBrush(options), resolveTuning(options.tuning));
-  context.save();
-  context.translate(x, y);
-  drawPaths(context, paths);
-  context.restore();
+  const { transform: _, bounds, ...style } = options;
+  const plan = planLines(lines, {
+    ...style,
+    scale,
+    ...(bounds ? { bounds: { ...bounds, x: bounds.x - x, y: bounds.y - y } } : {}),
+  });
+  drawPlan(context, plan, { offset: { x, y }, ...(bounds ? { clip: bounds } : {}) });
 }

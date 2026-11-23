@@ -1,6 +1,8 @@
 export { paintLines, type BrushStyle, type LineTransform, type PaintLinesOptions } from './paintLines';
+export { planLines, type PlanLinesOptions } from './plan';
+export { drawPlan, type DrawPlanOptions, type PaintContext } from './render';
+export type { Rect, StrokePath, StrokePlan } from './strokePlan';
 export { paintSvg, type PaintOptions, type SvgSource } from './paintSvg';
-export type { PaintContext } from './render';
 export { parseSvg } from './parse/svg';
 export { parseSvgDrawing } from './parse/drawing';
 export type { BrushKind } from './brush/brush';

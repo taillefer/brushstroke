@@ -5,6 +5,7 @@ import { parseSvg } from '../src/parse/svg';
 import { planPainting } from '../src/plan';
 import { resolveSeed } from '../src/random';
 import { resolveTuning } from '../src/tuning';
+import { planPaths } from './helpers';
 
 const SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
   <path d="M10 10 C40 80 60 80 90 10" stroke="teal"/>
@@ -12,8 +13,12 @@ const SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
 </svg>`;
 
 /** Steps 1–5 of the pipeline, as paintSvg runs them. */
-const plan = (text: string, seed?: number) =>
+const painting = (text: string, seed?: number) =>
   planPainting(parseSvg(text), resolveSeed(text, seed), 200, { brush: 'flat', size: 12, hand: 'right' }, resolveTuning());
+const plan = (text: string, seed?: number) => {
+  const { width, height, strokes } = painting(text, seed);
+  return { width, height, paths: planPaths(strokes) };
+};
 
 describe('planPainting', () => {
   it('gives identical bristle paths for the same SVG text', () => {

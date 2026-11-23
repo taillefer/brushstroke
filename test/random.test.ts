@@ -101,3 +101,31 @@ describe('hashText and resolveSeed', () => {
     expect(resolveSeed(svg, 42)).toBe(42);
   });
 });
+
+describe('createNoise2D caching', () => {
+  it('gives the same value for a point whatever was asked before it', () => {
+    const walk = createNoise2D(5);
+    const random = createRandom(1);
+    // A walk that steps to neighbouring cells in every direction, and jumps.
+    let x = 0;
+    let y = 0;
+    for (let k = 0; k < 2000; k++) {
+      const jump = random.next() < 0.05 ? 7 : 1.3;
+      x += (random.next() * 2 - 1) * jump;
+      y += (random.next() * 2 - 1) * jump;
+      expect(walk(x, y)).toBe(createNoise2D(5)(x, y));
+    }
+  });
+});
+
+describe('createNoise1D caching', () => {
+  it('gives the same value for an input whatever was asked before it', () => {
+    const walk = createNoise1D(5);
+    const random = createRandom(2);
+    let x = 0;
+    for (let k = 0; k < 2000; k++) {
+      x += (random.next() * 2 - 1) * (random.next() < 0.05 ? 9 : 0.7);
+      expect(walk(x)).toBe(createNoise1D(5)(x));
+    }
+  });
+});

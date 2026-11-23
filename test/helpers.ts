@@ -1,4 +1,5 @@
 import { expect } from 'vitest';
+import type { StrokePlan } from '../src/strokePlan';
 import type { Point, Segment, Subpath } from '../src/types';
 
 /** The start point and every segment end: the anchor points of a subpath. */
@@ -40,4 +41,17 @@ export function samplePoints(subpath: Subpath, perSegment = 8): Point[] {
   }
   points.push(from);
   return points;
+}
+
+/** A plan's paths as plain objects, for comparing and searching in tests. */
+export function planPaths(plan: StrokePlan): { color: string; width: number; points: Point[]; alphas: number[] }[] {
+  return plan.paths.map((path) => ({
+    color: path.color,
+    width: path.width,
+    points: Array.from({ length: path.count }, (_, k) => ({
+      x: plan.points[2 * (path.start + k)]!,
+      y: plan.points[2 * (path.start + k) + 1]!,
+    })),
+    alphas: Array.from(plan.alphas.subarray(path.start, path.start + path.count)),
+  }));
 }

@@ -28,7 +28,17 @@ The pipeline runs in this order. Every step before drawing is a plain function w
 7. Turn each stroke into bristle paths, with paint pooling, dryness and paper grain (`src/brush/`).
 8. Draw the bristle paths on a canvas (`src/render.ts`).
 
-The public API has two levels (see `docs/adr/0001-paint-lines-as-well-as-svg.md`). `paintLines` (`src/paintLines.ts`) paints lines the caller already holds onto an existing context: steps 2–8. `paintSvg` (`src/paintSvg.ts`) loads and parses an SVG, then sizes and clears a canvas and runs the same steps. `planLines` in `src/plan.ts` runs steps 2–7 for both, and `drawPaths` in `src/render.ts` does step 8.
+The public API has two levels (see `docs/adr/0001-paint-lines-as-well-as-svg.md`). `paintLines` (`src/paintLines.ts`) paints lines the caller already holds onto an existing context: steps 2–8. `paintSvg` (`src/paintSvg.ts`) loads and parses an SVG, then sizes and clears a canvas and runs the same steps.
+
+`paintLines` is `planLines` followed by `drawPlan`, and both are public for callers that repaint often (a map that pans, tiles cached per zoom step):
+
+- `planLines(lines, { seed, scale, bounds, ...brush })` in `src/plan.ts` runs steps 2–7 and returns a `StrokePlan` (`src/strokePlan.ts`): plain data, so it can be cached or built in a Worker. All points sit in one `Float64Array` (x, y), each piece's opacity step in one `Uint8Array`, and every path has its colour, width, start, count and bounding box; the plan has a box too. `bounds` skips whole lines that cannot paint inside it; lines are never cut, because cutting would change their tapering.
+- `drawPlan(context, plan, { offset, scale, clip })` in `src/render.ts` does step 8. `scale` multiplies coordinates and line widths, so a plan can be reused at a nearby zoom; for big zoom changes, plan again. `clip` skips paths whose box is outside it. It only sets canvas state that changes.
+- `planStrokes` in `src/plan.ts` is the shared planning loop. It hands bristle points to a `BristleSink` (`src/strokePlan.ts`), so the hot loop builds no objects per point. `paintSvg` uses it through `planPainting` and `drawPainting`.
+
+Level of detail is opt-in through three `Tuning` fields that are off at 0: `lodBristleSpacing` (fewer bristles on a small brush), `lodSingleStroke` (below this brush width, one stroke of varying width) and `lodPointSpacing` (points spaced by a share of the brush width). With them off, the output is unchanged.
+
+`test/callLog.test.ts` is the safety net for speed work: it checks the canvas calls `paintLines` makes against fixtures in `test/fixtures/calls/`, recorded before any optimisation. It compares what each `stroke()` paints with its full state, so skipping a redundant state change passes and anything that changes pixels fails. Do not regenerate the fixtures to make a speed-up pass.
 
 Scaling is applied to the geometry before step 2, never to the canvas, so every look number stays in output pixels. An offset is applied only when drawing, so it moves finished strokes without changing them. The paper grain belongs to the whole painting, not to one stroke, so it stays in place across strokes.
 

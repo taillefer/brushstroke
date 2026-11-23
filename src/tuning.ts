@@ -81,6 +81,17 @@ export interface Tuning {
   flatBrushAngle: number;
   /** Thickness of a flat brush's edge, as a share of its width. */
   flatBrushThickness: number;
+
+  // Level of detail. Each one is off at 0, which paints with full detail. Turn
+  // them on to paint many lines or small brushes faster, for example on a map
+  // that is zoomed out, at the cost of some texture.
+
+  /** Smallest distance between bristles across the brush, in pixels. A small brush gets fewer bristles. 0 is off. */
+  lodBristleSpacing: number;
+  /** A brush narrower than this, in pixels, paints one stroke of varying width instead of bristles. 0 is off. */
+  lodSingleStroke: number;
+  /** Distance between the points of a line, as a share of the brush width, never below 1 pixel. 0 keeps 1 pixel. */
+  lodPointSpacing: number;
 }
 
 export const defaultTuning: Tuning = {
@@ -128,6 +139,10 @@ export const defaultTuning: Tuning = {
 
   flatBrushAngle: 45,
   flatBrushThickness: 0.15,
+
+  lodBristleSpacing: 0,
+  lodSingleStroke: 0,
+  lodPointSpacing: 0,
 };
 
 export interface TuningFieldRange {
@@ -182,6 +197,10 @@ export const tuningRanges: Record<keyof Tuning, TuningFieldRange> = {
 
   flatBrushAngle: { min: 0, max: 90, step: 1 },
   flatBrushThickness: { min: 0.02, max: 1, step: 0.01 },
+
+  lodBristleSpacing: { min: 0, max: 4, step: 0.1 },
+  lodSingleStroke: { min: 0, max: 12, step: 0.5 },
+  lodPointSpacing: { min: 0, max: 1, step: 0.01 },
 };
 
 /** `defaultTuning` with the caller's values on top. */

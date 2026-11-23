@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { paintLines } from '../src/paintLines';
 import { planLines } from '../src/plan';
 import type { PaintContext } from '../src/render';
-import { resolveTuning } from '../src/tuning';
 import type { SvgLine } from '../src/types';
+import { planPaths } from './helpers';
 
 const lines: SvgLine[] = [
   { start: { x: 10, y: 40 }, segments: [{ kind: 'cubic', c1: { x: 40, y: 0 }, c2: { x: 70, y: 80 }, to: { x: 110, y: 40 } }], closed: false, color: 'teal' },
@@ -60,11 +60,9 @@ describe('paintLines', () => {
   });
 
   it('keeps the brush the same size when the lines are scaled', () => {
-    const tuning = resolveTuning();
-    const brush = { brush: 'flat' as const, size: 12, hand: 'right' as const };
     const straight: SvgLine[] = [{ start: { x: 0, y: 0 }, segments: [{ kind: 'line', to: { x: 100, y: 0 } }], closed: false, color: 'black' }];
     const spread = (factor: number) => {
-      const paths = planLines(straight, 1, factor, brush, tuning);
+      const paths = planPaths(planLines(straight, { seed: 1, scale: factor, size: 12 }));
       const middle = paths.flatMap((p) => p.points.filter((q) => Math.abs(q.x - 50 * factor) < 1).map((q) => q.y));
       return { widths: new Set(paths.map((p) => p.width)), across: Math.max(...middle) - Math.min(...middle) };
     };

@@ -41,13 +41,21 @@ export function createRandom(seed: number): Random {
 export function createNoise1D(seed: number): (x: number) => number {
   const base = seed >>> 0;
   const lattice = (i: number): number => (mix(base, i) / 4294967295) * 2 - 1;
+  // Neighbouring inputs usually fall in the same cell, so its two lattice values are kept.
+  let cell = NaN;
+  let a = 0;
+  let b = 0;
 
   return (x) => {
     const i = Math.floor(x);
     const t = x - i;
     const smooth = t * t * (3 - 2 * t);
-    const a = lattice(i);
-    return a + (lattice(i + 1) - a) * smooth;
+    if (i !== cell) {
+      cell = i;
+      a = lattice(i);
+      b = lattice(i + 1);
+    }
+    return a + (b - a) * smooth;
   };
 }
 
@@ -57,16 +65,66 @@ export function createNoise1D(seed: number): (x: number) => number {
  */
 export function createNoise2D(seed: number): (x: number, y: number) => number {
   const base = seed >>> 0;
-  const lattice = (i: number, j: number): number => (mix(mix(base, i), j) / 4294967295) * 2 - 1;
+  // The lattice value at (i, j) is unit(mix(column(i), j)), with column(i) = mix(base, i).
+  const unit = (hash: number): number => (hash / 4294967295) * 2 - 1;
   const ease = (t: number) => t * t * (3 - 2 * t);
+  // Neighbouring inputs usually fall in the same cell or the next one, so the
+  // cell's column hashes and corner values are kept, and a step to a
+  // neighbouring cell reuses the two corners they share.
+  let cellX = NaN;
+  let cellY = NaN;
+  let column0 = 0;
+  let column1 = 0;
+  let c00 = 0;
+  let c10 = 0;
+  let c01 = 0;
+  let c11 = 0;
 
   return (x, y) => {
     const i = Math.floor(x);
     const j = Math.floor(y);
+    if (i !== cellX || j !== cellY) {
+      if (j === cellY && i === cellX + 1) {
+        column0 = column1;
+        column1 = mix(base, i + 1);
+        c00 = c10;
+        c01 = c11;
+        c10 = unit(mix(column1, j));
+        c11 = unit(mix(column1, j + 1));
+      } else if (j === cellY && i === cellX - 1) {
+        column1 = column0;
+        column0 = mix(base, i);
+        c10 = c00;
+        c11 = c01;
+        c00 = unit(mix(column0, j));
+        c01 = unit(mix(column0, j + 1));
+      } else if (i === cellX && j === cellY + 1) {
+        c00 = c01;
+        c10 = c11;
+        c01 = unit(mix(column0, j + 1));
+        c11 = unit(mix(column1, j + 1));
+      } else if (i === cellX && j === cellY - 1) {
+        c01 = c00;
+        c11 = c10;
+        c00 = unit(mix(column0, j));
+        c10 = unit(mix(column1, j));
+      } else {
+        if (i !== cellX) {
+          column0 = mix(base, i);
+          column1 = mix(base, i + 1);
+        }
+        c00 = unit(mix(column0, j));
+        c10 = unit(mix(column1, j));
+        c01 = unit(mix(column0, j + 1));
+        c11 = unit(mix(column1, j + 1));
+      }
+      cellX = i;
+      cellY = j;
+    }
     const tx = ease(x - i);
     const ty = ease(y - j);
-    const top = lattice(i, j) + (lattice(i + 1, j) - lattice(i, j)) * tx;
-    const bottom = lattice(i, j + 1) + (lattice(i + 1, j + 1) - lattice(i, j + 1)) * tx;
+    const top = c00 + (c10 - c00) * tx;
+    const bottom = c01 + (c11 - c01) * tx;
     return top + (bottom - top) * ty;
   };
 }

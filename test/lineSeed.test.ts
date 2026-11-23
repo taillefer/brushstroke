@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseSvg } from '../src/parse/svg';
 import { planPainting } from '../src/plan';
+import { planPaths } from './helpers';
 import { lineSeedNumber } from '../src/random';
 import { resolveTuning } from '../src/tuning';
 import type { ParsedSvg, SvgLine } from '../src/types';
@@ -18,7 +19,7 @@ const parsed = (lines: SvgLine[]): ParsedSvg => ({ width: 100, height: 100, line
 
 /** The bristle paths of the line painted in `color`. Each test line has its own colour. */
 const pathsOf = (svg: ParsedSvg, color: string, seed = 7) =>
-  planPainting(svg, seed, 100, { brush: 'flat', size: 12, hand: 'right' }, resolveTuning()).paths.filter(
+  planPaths(planPainting(svg, seed, 100, { brush: 'flat', size: 12, hand: 'right' }, resolveTuning()).strokes).filter(
     (path) => path.color === color,
   );
 

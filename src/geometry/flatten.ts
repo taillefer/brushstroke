@@ -27,10 +27,10 @@ export interface FlatLine {
 }
 
 /**
- * Turns a line of segments into points about `POINT_SPACING` apart, and
- * marks the anchors and the corners.
+ * Turns a line of segments into points about `spacing` apart, and marks the
+ * anchors and the corners.
  */
-export function flattenLine(line: SvgLine, tuning: Pick<Tuning, 'cornerAngle'>): FlatLine {
+export function flattenLine(line: SvgLine, tuning: Pick<Tuning, 'cornerAngle'>, spacing = POINT_SPACING): FlatLine {
   const points: LinePoint[] = [{ ...line.start, distance: 0, anchor: true, corner: false, turn: 0 }];
   let from = line.start;
   let distance = 0;
@@ -39,17 +39,19 @@ export function flattenLine(line: SvgLine, tuning: Pick<Tuning, 'cornerAngle'>):
     const dense = sampleSegment(from, segment);
     const lengths = cumulativeLengths(dense);
     const length = lengths[lengths.length - 1]!;
-    const count = Math.max(1, Math.ceil(length / POINT_SPACING));
+    const count = Math.max(1, Math.ceil(length / spacing));
+    // Targets only grow, so the search goes on from where the last one stopped.
+    const cursor = { index: 1 };
     for (let i = 1; i <= count; i++) {
       const target = (length * i) / count;
-      const point = i === count ? segment.to : pointAtLength(dense, lengths, target);
+      const point = i === count ? segment.to : pointAtLength(dense, lengths, target, cursor);
       points.push({ ...point, distance: distance + target, anchor: i === count, corner: false, turn: 0 });
     }
     distance += length;
     from = segment.to;
   }
 
-  markCorners(points, line.closed, tuning.cornerAngle);
+  markCorners(points, line.closed, tuning.cornerAngle, spacing);
   return { points, closed: line.closed, length: distance, color: line.color };
 }
 
@@ -62,41 +64,50 @@ export function withDistances(points: LinePoint[]): LinePoint[] {
   });
 }
 
-function sampleSegment(from: Point, segment: Segment): Point[] {
-  if (segment.kind === 'line') return [from, segment.to];
+/** Points along a segment, as x and y arrays. A curve is sampled finely enough to measure its length. */
+function sampleSegment(from: Point, segment: Segment): Samples {
+  if (segment.kind === 'line') return { xs: [from.x, segment.to.x], ys: [from.y, segment.to.y] };
   const { c1, c2, to } = segment;
   // The control polygon is never shorter than the curve, so this gives enough samples.
   const roughLength = Math.hypot(c1.x - from.x, c1.y - from.y) + Math.hypot(c2.x - c1.x, c2.y - c1.y)
     + Math.hypot(to.x - c2.x, to.y - c2.y);
   const count = Math.max(2, Math.ceil(roughLength * CURVE_SAMPLES_PER_PIXEL));
-  const samples: Point[] = [];
+  const xs = new Float64Array(count + 1);
+  const ys = new Float64Array(count + 1);
   for (let i = 0; i <= count; i++) {
     const t = i / count;
     const u = 1 - t;
-    samples.push({
-      x: u * u * u * from.x + 3 * u * u * t * c1.x + 3 * u * t * t * c2.x + t * t * t * to.x,
-      y: u * u * u * from.y + 3 * u * u * t * c1.y + 3 * u * t * t * c2.y + t * t * t * to.y,
-    });
+    xs[i] = u * u * u * from.x + 3 * u * u * t * c1.x + 3 * u * t * t * c2.x + t * t * t * to.x;
+    ys[i] = u * u * u * from.y + 3 * u * u * t * c1.y + 3 * u * t * t * c2.y + t * t * t * to.y;
   }
-  return samples;
+  return { xs, ys };
 }
 
-function cumulativeLengths(points: Point[]): number[] {
-  const lengths = [0];
-  for (let i = 1; i < points.length; i++) {
-    lengths.push(lengths[i - 1]! + Math.hypot(points[i]!.x - points[i - 1]!.x, points[i]!.y - points[i - 1]!.y));
+interface Samples {
+  xs: ArrayLike<number>;
+  ys: ArrayLike<number>;
+}
+
+function cumulativeLengths({ xs, ys }: Samples): Float64Array {
+  const lengths = new Float64Array(xs.length);
+  for (let i = 1; i < xs.length; i++) {
+    lengths[i] = lengths[i - 1]! + Math.hypot(xs[i]! - xs[i - 1]!, ys[i]! - ys[i - 1]!);
   }
   return lengths;
 }
 
-function pointAtLength(points: Point[], lengths: number[], target: number): Point {
-  let i = 1;
+/**
+ * The point at `target` along the samples. `cursor.index` is where to start
+ * looking; it is left at the piece found, so increasing targets take linear
+ * time in total.
+ */
+function pointAtLength({ xs, ys }: Samples, lengths: Float64Array, target: number, cursor: { index: number }): Point {
+  let i = cursor.index;
   while (i < lengths.length - 1 && lengths[i]! < target) i++;
-  const a = points[i - 1]!;
-  const b = points[i]!;
+  cursor.index = i;
   const span = lengths[i]! - lengths[i - 1]!;
   const t = span > 0 ? (target - lengths[i - 1]!) / span : 0;
-  return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+  return { x: xs[i - 1]! + (xs[i]! - xs[i - 1]!) * t, y: ys[i - 1]! + (ys[i]! - ys[i - 1]!) * t };
 }
 
 /**
@@ -104,11 +115,11 @@ function pointAtLength(points: Point[], lengths: number[], target: number): Poin
  * after it differ by more than `cornerAngle`. Only the sharpest point of each
  * turn is marked, so one corner is one point.
  */
-function markCorners(points: LinePoint[], closed: boolean, cornerAngle: number): void {
+function markCorners(points: LinePoint[], closed: boolean, cornerAngle: number, spacing: number): void {
   const limit = (cornerAngle * Math.PI) / 180;
   // A closed line repeats its first point at the end. Leave the copy out while measuring.
   const count = closed ? points.length - 1 : points.length;
-  const reach = Math.max(1, Math.round(TURN_WINDOW / POINT_SPACING));
+  const reach = Math.max(1, Math.round(TURN_WINDOW / spacing));
   const at = (i: number): LinePoint | undefined =>
     closed ? points[((i % count) + count) % count] : points[i];
 

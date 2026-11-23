@@ -3,6 +3,7 @@ import type { FlatLine } from '../geometry/flatten';
 import type { Hand } from '../hand';
 import { createNoise1D, type Random } from '../random';
 import type { Tuning } from '../tuning';
+import type { BristleSink } from '../strokePlan';
 import type { Point } from '../types';
 
 export type BrushKind = 'flat' | 'round';
@@ -80,6 +81,33 @@ export function brushLine(
   random: Random,
   paper: Paper = flatPaper,
 ): BristlePath[] {
+  const paths: BristlePath[] = [];
+  paintBristles(line, pressure, options, tuning, random, paper, {
+    beginPath: (color, width) => paths.push({ color, width, points: [] }),
+    point: (x, y, alpha) => paths[paths.length - 1]!.points.push({ x, y, alpha }),
+    endPath: () => {},
+  });
+  return paths;
+}
+
+/** Like `brushLine`, but hands every path to `sink` point by point instead of building objects. */
+export function paintBristles(
+  line: FlatLine,
+  pressure: readonly number[],
+  options: BrushOptions,
+  tuning: Tuning,
+  random: Random,
+  paper: Paper,
+  sink: BristleSink,
+): void {
+  if (options.size < tuning.lodSingleStroke) {
+    paintSingleStroke(line, pressure, options, tuning, random, paper, sink);
+    return;
+  }
+  if (tuning.lodBristleSpacing > 0) {
+    const count = Math.max(1, Math.min(Math.round(tuning.bristleCount), Math.floor(options.size / tuning.lodBristleSpacing)));
+    if (count < tuning.bristleCount) tuning = { ...tuning, bristleCount: count };
+  }
   const bristles = createBristles(options, tuning, random);
   const width = Math.max(0.5, (options.size / tuning.bristleCount) * tuning.bristleWidth);
   // The edge of the mark fades over the space between two bristles, so it is soft rather than stepped.
@@ -88,23 +116,79 @@ export function brushLine(
   const poolCentres = [0, ...line.points.filter((p) => p.corner).map((p) => p.distance)];
   const pool = bumpAround(line, poolCentres, tuning.poolLength * options.size);
 
-  return bristles.map((bristle) => ({
-    color: line.color,
-    width,
-    points: line.points.map((point, i) => {
-      const p = pressure[i] ?? 0;
-      const reachAtPressure = (tuning.minimumWidth + (1 - tuning.minimumWidth) * p) / 2;
-      const contact = clamp01((reachAtPressure - bristle.reach) / edgeSoftness + 0.5);
-      const darkness = 1 + (p - 1) * tuning.pressureDarkness;
-      const pooled = 1 + tuning.poolAmount * pool[i]!;
+  // What depends only on the point is worked out once, for all bristles.
+  const { points } = line;
+  const count = points.length;
+  const pressures = new Float64Array(count);
+  const reaches = new Float64Array(count);
+  const darknesses = new Float64Array(count);
+  const pools = new Float64Array(count);
+  for (let i = 0; i < count; i++) {
+    const p = pressure[i] ?? 0;
+    pressures[i] = p;
+    reaches[i] = (tuning.minimumWidth + (1 - tuning.minimumWidth) * p) / 2;
+    darknesses[i] = 1 + (p - 1) * tuning.pressureDarkness;
+    pools[i] = 1 + tuning.poolAmount * pool[i]!;
+  }
+  const { bristleOpacity, grainAmount, grainContrast } = tuning;
+
+  for (const bristle of bristles) {
+    sink.beginPath(line.color, width, count, false);
+    const { x: offsetX, y: offsetY } = bristle.offset;
+    for (let i = 0; i < count; i++) {
+      const point = points[i]!;
+      const contact = clamp01((reaches[i]! - bristle.reach) / edgeSoftness + 0.5);
       const left = paintLeft(bristle, point.distance, tuning);
-      const x = point.x + bristle.offset.x;
-      const y = point.y + bristle.offset.y;
-      const grain = grainCoverage(paper(x, y), p * left, tuning);
-      const alpha = Math.min(1, tuning.bristleOpacity * contact * darkness * pooled * left * grain);
-      return { x, y, alpha };
-    }),
-  }));
+      const x = point.x + offsetX;
+      const y = point.y + offsetY;
+      // grainCoverage, inlined.
+      const waterline = grainAmount * (1 - pressures[i]! * left);
+      const grain = clamp01(1 - (waterline - paper(x, y)) * grainContrast);
+      const alpha = Math.min(1, bristleOpacity * contact * darknesses[i]! * pools[i]! * left * grain);
+      sink.point(x, y, alpha, 1);
+    }
+    sink.endPath();
+  }
+}
+
+/**
+ * Level of detail for a brush too small for its bristles to show: one stroke
+ * whose width follows the pressure, as wide as the bristles' mark would be.
+ * Its opacity stands in for the few bristles that overlap at each spot. The
+ * pooling, drying and paper grain are those of a single bristle in the
+ * middle of the brush.
+ */
+function paintSingleStroke(
+  line: FlatLine,
+  pressure: readonly number[],
+  options: BrushOptions,
+  tuning: Tuning,
+  random: Random,
+  paper: Paper,
+  sink: BristleSink,
+): void {
+  const poolCentres = [0, ...line.points.filter((p) => p.corner).map((p) => p.distance)];
+  const pool = bumpAround(line, poolCentres, tuning.poolLength * options.size);
+  const bristle: Bristle = {
+    offset: { x: 0, y: 0 },
+    reach: 0,
+    dryDistance: tuning.dryDistance,
+    gapNoise: createNoise1D(Math.floor(random.fork(0).next() * 4294967296)),
+  };
+  const layers = Math.max(1, tuning.bristleWidth);
+
+  sink.beginPath(line.color, options.size, line.points.length, true);
+  line.points.forEach((point, i) => {
+    const p = pressure[i] ?? 0;
+    const share = tuning.minimumWidth + (1 - tuning.minimumWidth) * p;
+    const darkness = 1 + (p - 1) * tuning.pressureDarkness;
+    const pooled = 1 + tuning.poolAmount * pool[i]!;
+    const left = paintLeft(bristle, point.distance, tuning);
+    const grain = grainCoverage(paper(point.x, point.y), p * left, tuning);
+    const layer = Math.min(1, tuning.bristleOpacity * darkness * pooled * left * grain);
+    sink.point(point.x, point.y, 1 - (1 - layer) ** layers, share);
+  });
+  sink.endPath();
 }
 
 function createBristles(options: BrushOptions, tuning: Tuning, random: Random): Bristle[] {
