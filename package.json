@@ -1,6 +1,6 @@
 {
   "name": "brushstroke",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Paint SVG lines on a canvas as if drawn with a brush",
   "type": "module",
   "files": [
