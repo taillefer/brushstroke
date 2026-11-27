@@ -19,6 +19,10 @@ export interface BrushOptions {
    * places. Default 1. Set by `planStrokes` from `anchorScale`.
    */
   noiseRatio?: number;
+  /** False keeps the bristles from running dry along the line. Default true. Set by `planStrokes` for seamless lines. */
+  dries?: boolean;
+  /** False leaves out the pool of paint where the brush touches down, for a line cut from a longer one. Default true. */
+  poolAtStart?: boolean;
 }
 
 export interface BristlePoint extends Point {
@@ -119,7 +123,7 @@ export function paintBristles(
   // The edge of the mark fades over the space between two bristles, so it is soft rather than stepped.
   const edgeSoftness = 0.5 / tuning.bristleCount;
   // Paint pools where the brush touches down and where it pauses at a corner.
-  const poolCentres = [0, ...line.points.filter((p) => p.corner).map((p) => p.distance)];
+  const poolCentres = [...(options.poolAtStart === false ? [] : [0]), ...line.points.filter((p) => p.corner).map((p) => p.distance)];
   const pool = bumpAround(line, poolCentres, tuning.poolLength * options.size);
 
   // What depends only on the point is worked out once, for all bristles.
@@ -151,7 +155,7 @@ export function paintBristles(
     for (let i = 0; i < count; i++) {
       const point = points[i]!;
       const contact = clamp01((reaches[i]! - bristle.reach) / edgeSoftness + 0.5);
-      const left = paintLeft(bristle, point.distance * ratio, tuning);
+      const left = options.dries === false ? 1 : paintLeft(bristle, point.distance * ratio, tuning);
       const spread = spreads ? spreads[i]! : 1;
       const x = spreads ? point.x + offsetX * spread : point.x + offsetX;
       const y = spreads ? point.y + offsetY * spread : point.y + offsetY;
@@ -191,7 +195,7 @@ function paintSingleStroke(
   paper: Paper,
   sink: BristleSink,
 ): void {
-  const poolCentres = [0, ...line.points.filter((p) => p.corner).map((p) => p.distance)];
+  const poolCentres = [...(options.poolAtStart === false ? [] : [0]), ...line.points.filter((p) => p.corner).map((p) => p.distance)];
   const pool = bumpAround(line, poolCentres, tuning.poolLength * options.size);
   const bristle: Bristle = {
     offset: { x: 0, y: 0 },
@@ -209,7 +213,7 @@ function paintSingleStroke(
     const share = tuning.minimumWidth + (1 - tuning.minimumWidth) * p;
     const darkness = 1 + (p - 1) * tuning.pressureDarkness;
     const pooled = 1 + tuning.poolAmount * pool[i]!;
-    const left = paintLeft(bristle, point.distance * ratio, tuning);
+    const left = options.dries === false ? 1 : paintLeft(bristle, point.distance * ratio, tuning);
     const grain = grainCoverage(paper(point.x, point.y), p * left, tuning);
     const layer = Math.min(1, tuning.bristleOpacity * darkness * pooled * left * grain);
     sink.point(point.x, point.y, 1 - (1 - layer) ** layers, spreads ? share * spreads[i]! : share);

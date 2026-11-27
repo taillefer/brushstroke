@@ -35,6 +35,18 @@ export interface PlanLinesOptions extends BrushStyle {
    * in, so nothing slides along the coast while the user pinches.
    */
   anchorScale?: number;
+  /**
+   * For lines painted in pieces, such as the tiles of a map: the same
+   * stretch of line, planned in two pieces that start and end in different
+   * places, paints the same. The pressure noise and the hand's wobble are
+   * sampled where each point lies (at line coordinates × `anchorScale`)
+   * instead of how far along its line it is. Lines are not split at corners
+   * and not turned to the hand's direction, so give them in a direction that
+   * does not depend on the piece. An end outside `bounds` is a cut, not an
+   * end: it gets no taper and no pool. Bristles do not run dry along a line.
+   * Default false. *Since 0.5.0.*
+   */
+  seamless?: boolean;
 }
 
 /**
@@ -54,6 +66,7 @@ export function planLines(lines: SvgLine[], options: PlanLinesOptions = {}): Str
     builder,
     options.bounds,
     noiseRatio(options.anchorScale, options.scale ?? 1),
+    options.seamless ?? false,
   );
   return builder.finish();
 }
@@ -96,6 +109,7 @@ export function planStrokes(
   sink: BristleSink,
   bounds?: Rect,
   ratio = 1,
+  seamless = false,
 ): void {
   const random = createRandom(seed);
   // The paper is shared by all strokes. Lines without a seed use forks 0, 1, 2…
@@ -125,6 +139,23 @@ export function planStrokes(
         point.width = width.start + (width.end - width.start) * (flat.length > 0 ? point.distance / flat.length : 0);
       }
     }
+    if (seamless) {
+      // One stroke as given, its look taken from where its points lie, so a piece of it planned
+      // elsewhere paints the same. An end outside the bounds is where the piece was cut.
+      const strokeRandom = lineRandom.fork(0);
+      const grow = bounds ? margin : 0;
+      const cut = (p: { x: number; y: number }) =>
+        bounds !== undefined && (p.x < bounds.x - grow || p.y < bounds.y - grow || p.x > bounds.x + bounds.width + grow || p.y > bounds.y + bounds.height + grow);
+      const first = flat.points[0];
+      const last = flat.points[flat.points.length - 1];
+      const ends = { start: !flat.closed && first !== undefined && !cut(first), end: !flat.closed && last !== undefined && !cut(last) };
+      const wobbleNoise = placed(createNoise2D(Math.floor(strokeRandom.fork(2).next() * 4294967296)), ratio);
+      const stroke = wobbleLine(flat, tuning, () => 0, (p) => wobbleNoise(p, tuning.wobbleWavelength));
+      const pressureNoise = placed(createNoise2D(Math.floor(strokeRandom.fork(0).next() * 4294967296)), ratio);
+      const pressure = linePressure(stroke, lineBrush.size, tuning, () => 0, { at: (p) => pressureNoise(p, tuning.noiseWavelength), ends });
+      paintBristles(stroke, pressure, { ...lineBrush, dries: false, poolAtStart: ends.start }, tuning, strokeRandom.fork(1), paper, sink);
+      return;
+    }
     // Each piece of a split line is its own stroke, with its own randomness.
     splitAtCorners(flat, tuning, lineSpacing).forEach((piece, pieceIndex) => {
       const strokeRandom = lineRandom.fork(pieceIndex);
@@ -144,6 +175,11 @@ function noiseRatio(anchorScale: number | undefined, scale: number): number {
     throw new RangeError(`brushstroke: anchorScale must be a number above 0, not ${anchorScale}`);
   }
   return scale > 0 ? anchorScale / scale : 1;
+}
+
+/** Noise at a point of a line, sampled where it lies, × ratio, in waves `wavelength` long. */
+function placed(noise: (x: number, y: number) => number, ratio: number): (p: { x: number; y: number }, wavelength: number) => number {
+  return (p, wavelength) => noise((p.x * ratio) / wavelength, (p.y * ratio) / wavelength);
 }
 
 /** Noise along a line, sampled at distances × ratio. */

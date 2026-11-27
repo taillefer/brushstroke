@@ -75,6 +75,7 @@ It takes `brush`, `size`, `hand` and `tuning` like `paintSvg`. It also takes:
 | `seed` | `0` | The seed for the variations. There is no SVG text to hash. |
 | `transform` | `{ scale: 1, x: 0, y: 0 }` | Maps line coordinates to canvas pixels. |
 | `anchorScale` | `transform.scale` | The scale the noise is laid out at, so it stays in place while zooming (see below). |
+| `seamless` | `false` | Paints lines that are planned in pieces, such as map tiles, so the pieces join up (see below). |
 
 Behaviour to rely on:
 
@@ -101,6 +102,22 @@ paintLines(context, coast, { size: 6, transform: { scale: zoom }, anchorScale: s
 - The default is `transform.scale` (for `planLines`, `scale`), which paints exactly as before.
 - Holding it at a zoom step, as above, keeps the texture in place within the step and keeps its size on screen between half and twice the tuned one. At a step change the texture changes; cross-fade the two steps to hide it.
 - It must be a number above 0, or `RangeError` is thrown.
+
+### Lines painted in pieces
+
+*Since 0.5.0.* A map paints its lines tile by tile. Each tile only knows the part of a contour or coast that crosses it, plus a little past it, so the same line starts and ends in different places in two neighbouring tiles. Without `seamless`, the brush's look follows the distance from where a line starts, the line is split at its corners and turned to the hand's direction, and its ends taper, so the two pieces paint differently and a seam shows at the tile's edge.
+
+`seamless: true` paints them the same:
+
+```ts
+paintLines(tile, piecesOfContours, { size: 2, transform: { scale: 1, x: -tileX, y: -tileY }, bounds: tileRect, anchorScale: 1, seamless: true });
+```
+
+- The pressure noise and the wobble's bends are sampled where each point lies (at line coordinates × `anchorScale`), not by distance along the line.
+- A line is one stroke: it is not split at corners and not turned to the hand's direction. Give each line in a direction that does not depend on the piece, for example with the higher ground always on the same side.
+- An end outside `bounds` (grown by how far the paint can reach) is a cut: it gets no taper and no pool. Let lines run on past the tile, so their real ends are the only ones inside.
+- Bristles do not run dry along a line, since how far a bristle has gone depends on where the piece starts.
+- Give each kind of line the same `seed` in every piece. The bristles' layout comes from it.
 
 ### Width per line and along a line
 

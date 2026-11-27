@@ -1,4 +1,4 @@
-import type { FlatLine } from './geometry/flatten';
+import type { FlatLine, LinePoint } from './geometry/flatten';
 import type { Tuning } from './tuning';
 
 /**
@@ -7,12 +7,16 @@ import type { Tuning } from './tuning';
  * `wobbleAmount`. On a closed line it returns to the same value where the
  * line meets itself, so there is no step at the join.
  *
- * `noise` is smooth 1D noise in [-1, 1], seeded for this stroke.
+ * `noise` is smooth 1D noise in [-1, 1], seeded for this stroke, sampled by
+ * distance along the line. `at`, when given, is used instead: the drift at a
+ * point from where it lies, so a piece of the line drifts the same wherever
+ * the piece starts.
  */
 export function wobbleLine(
   line: FlatLine,
   tuning: Pick<Tuning, 'wobbleAmount' | 'wobbleWavelength'>,
   noise: (x: number) => number,
+  at?: (point: LinePoint) => number,
 ): FlatLine {
   if (tuning.wobbleAmount === 0 || line.points.length < 2) return line;
   const { points, length } = line;
@@ -36,7 +40,7 @@ export function wobbleLine(
       const dy = after.y - before.y;
       const span = Math.hypot(dx, dy);
       if (span === 0) return point;
-      const offset = drift(point.distance) * tuning.wobbleAmount;
+      const offset = (at ? at(point) : drift(point.distance)) * tuning.wobbleAmount;
       // The normal points to the left of the travel direction.
       return { ...point, x: point.x - (dy / span) * offset, y: point.y + (dx / span) * offset };
     }),

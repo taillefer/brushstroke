@@ -31,6 +31,18 @@ export interface PaintLinesOptions extends BrushStyle {
    * on the lines while `transform.scale` changes. Default: `transform.scale`.
    */
   anchorScale?: number;
+  /**
+   * For lines painted in pieces, such as the tiles of a map: the same
+   * stretch of line, planned in two pieces that start and end in different
+   * places, paints the same. The pressure noise and the hand's wobble are
+   * sampled where each point lies (at line coordinates × `anchorScale`)
+   * instead of how far along its line it is. Lines are not split at corners
+   * and not turned to the hand's direction, so give them in a direction that
+   * does not depend on the piece. An end outside `bounds` is a cut, not an
+   * end: it gets no taper and no pool. Bristles do not run dry along a line.
+   * Default false. *Since 0.5.0.*
+   */
+  seamless?: boolean;
 }
 
 /**

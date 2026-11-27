@@ -1,5 +1,5 @@
 import { bumpAround, smoothstep } from './geometry/bump';
-import type { FlatLine } from './geometry/flatten';
+import type { FlatLine, LinePoint } from './geometry/flatten';
 import type { Tuning } from './tuning';
 
 /**
@@ -13,13 +13,17 @@ import type { Tuning } from './tuning';
  * 4. A touch-down at the start and a lift-off at the end, which blend the
  *    result toward lighter pressures.
  *
- * `noise` is smooth 1D noise in [-1, 1], seeded for this line.
+ * `noise` is smooth 1D noise in [-1, 1], seeded for this line, sampled by
+ * distance along it. With `options.at`, the noise at a point comes from there
+ * instead, already in [-1, 1]. `options.ends` turns off the touch-down or the
+ * lift-off at an end that is not a real end, where a longer line was cut.
  */
 export function linePressure(
   line: FlatLine,
   brushSize: number,
   tuning: Tuning,
   noise: (x: number) => number,
+  options: { at?: (point: LinePoint) => number; ends?: { start: boolean; end: boolean } } = {},
 ): number[] {
   const { points, length } = line;
   const spread = tuning.slowdownLength * brushSize;
@@ -35,10 +39,10 @@ export function linePressure(
       + tuning.anchorPressure * anchorBump[i]!
       + tuning.cornerPressure * cornerBump[i]!
       + tuning.directionPressure * 0.5 * direction
-      + tuning.noiseAmount * noise(point.distance / tuning.noiseWavelength);
+      + tuning.noiseAmount * (options.at ? options.at(point) : noise(point.distance / tuning.noiseWavelength));
 
-    pressure = mix(tuning.touchDownPressure, pressure, ramp(point.distance, startLength));
-    pressure = mix(tuning.liftOffPressure, pressure, ramp(length - point.distance, endLength));
+    if (options.ends?.start !== false) pressure = mix(tuning.touchDownPressure, pressure, ramp(point.distance, startLength));
+    if (options.ends?.end !== false) pressure = mix(tuning.liftOffPressure, pressure, ramp(length - point.distance, endLength));
     return Math.min(1, Math.max(0, pressure));
   });
 }
